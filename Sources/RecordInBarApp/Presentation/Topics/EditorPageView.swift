@@ -4,6 +4,7 @@ import SwiftUI
 
 struct EditorPageView: View {
     @Environment(\.modelContext) private var modelContext
+    @Query private var allTopics: [Topic]
     @Query(sort: \AISummary.createdAt, order: .reverse) private var summaries: [AISummary]
     @Query private var allNotes: [NoteItem]
     @Query private var allSummaries: [AISummary]
@@ -264,13 +265,20 @@ struct EditorPageView: View {
         let trimmedTitle = draftTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedNote = draftNote.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        guard existingTopic != nil || !trimmedTitle.isEmpty || !trimmedNote.isEmpty else {
+        guard existingTopic != nil || loadedTopicID != nil || !trimmedTitle.isEmpty || !trimmedNote.isEmpty else {
             return
         }
 
         let targetTopic: Topic
         if let existingTopic {
             targetTopic = existingTopic
+        } else if let loadedTopicID {
+            guard let storedTopic = allTopics.first(where: { $0.id == loadedTopicID }) else {
+                // A draft topic was already created for this editing session.
+                // Wait for the query snapshot to include it instead of creating duplicates.
+                return
+            }
+            targetTopic = storedTopic
         } else {
             let createdTopic = Topic(title: trimmedTitle, kind: .other)
             modelContext.insert(createdTopic)
