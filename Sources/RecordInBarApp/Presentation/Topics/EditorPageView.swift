@@ -1,3 +1,4 @@
+import AppKit
 import SwiftData
 import SwiftUI
 
@@ -20,6 +21,7 @@ struct EditorPageView: View {
     @State private var draftTitle = ""
     @State private var draftNote = ""
     @State private var loadedTopicID: UUID?
+    @State private var showCopiedToast = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -153,6 +155,27 @@ struct EditorPageView: View {
                                         .textSelection(.enabled)
                                         .lineSpacing(4)
                                         .frame(maxWidth: .infinity, alignment: .leading)
+
+                                    HStack {
+                                        Spacer()
+
+                                        ZStack(alignment: .bottomTrailing) {
+                                            if showCopiedToast {
+                                                CopyToastView(text: "已复制")
+                                                    .offset(y: -24)
+                                                    .transition(.move(edge: .top).combined(with: .opacity))
+                                            }
+
+                                            Button {
+                                                copySummary(latestSummary.summaryText)
+                                            } label: {
+                                                Image(systemName: "doc.on.doc")
+                                                    .font(.system(size: 11, weight: .semibold))
+                                                    .foregroundStyle(PanelCardTone.summary.accent)
+                                            }
+                                            .buttonStyle(IconHoverButtonStyle())
+                                        }
+                                    }
                                 }
                                 .frame(maxWidth: .infinity, minHeight: 92, alignment: .topLeading)
                             }
@@ -205,6 +228,24 @@ struct EditorPageView: View {
 
     private func latestSummary(for topic: Topic) -> AISummary? {
         summaries.first(where: { $0.topicID == topic.id })
+    }
+
+    @MainActor
+    private func copySummary(_ text: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+
+        withAnimation(.easeOut(duration: 0.18)) {
+            showCopiedToast = true
+        }
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(900))
+            withAnimation(.easeIn(duration: 0.28)) {
+                showCopiedToast = false
+            }
+        }
     }
 
     @MainActor
@@ -272,6 +313,21 @@ struct EditorPageView: View {
         }
 
         try? modelContext.save()
+    }
+}
+
+private struct CopyToastView: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.black.opacity(0.78))
+            .clipShape(Capsule())
+            .shadow(color: .black.opacity(0.12), radius: 4, x: 0, y: 2)
     }
 }
 
