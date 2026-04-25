@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftData
 import SwiftUI
 
@@ -26,6 +27,7 @@ struct RecordInBarApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
+    private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -58,6 +60,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             name: NSPopover.didCloseNotification,
             object: popover
         )
+
+        PopoverPinManager.shared.$isPinned
+            .sink { [weak self] isPinned in
+                self?.popover?.behavior = isPinned ? .applicationDefined : .transient
+            }
+            .store(in: &cancellables)
 
         self.popover = popover
     }
