@@ -114,7 +114,50 @@ struct DeepSeekClient {
             throw DeepSeekClientError.invalidResponse
         }
 
-        return DeepSeekSummaryResult(summaryText: content.trimmingCharacters(in: .whitespacesAndNewlines))
+        return DeepSeekSummaryResult(summaryText: Self.sanitizeSummary(content))
+    }
+
+    private static func sanitizeSummary(_ raw: String) -> String {
+        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let exactPrefixes = [
+            "以下是总结：",
+            "以下是总结:",
+            "总结如下：",
+            "总结如下:",
+            "内容总结：",
+            "内容总结:",
+            "总结：",
+            "总结:",
+            "摘要：",
+            "摘要:"
+        ]
+
+        for prefix in exactPrefixes where text.hasPrefix(prefix) {
+            text.removeFirst(prefix.count)
+            text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        let lines = text
+            .components(separatedBy: .newlines)
+            .drop(while: { line in
+                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty || Self.isBoilerplateHeading(trimmed)
+            })
+
+        return lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func isBoilerplateHeading(_ line: String) -> Bool {
+        let normalized = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        let candidates = [
+            "以下是总结",
+            "总结如下",
+            "总结",
+            "摘要",
+            "内容总结"
+        ]
+        return candidates.contains(normalized)
     }
 }
 
