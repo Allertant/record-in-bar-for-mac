@@ -40,8 +40,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
                 systemSymbolName: "rectangle.stack.badge.plus",
                 accessibilityDescription: "状态栏记录"
             )
-            button.action = #selector(togglePopover)
+            button.action = #selector(handleStatusItemEvent)
             button.target = self
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
 
         let popover = NSPopover()
@@ -79,6 +80,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     }
 
     // MARK: - Status bar toggle
+
+    @MainActor @objc private func handleStatusItemEvent() {
+        guard let event = NSApp.currentEvent else {
+            togglePopover()
+            return
+        }
+        if event.type == .rightMouseUp {
+            showContextMenu()
+        } else {
+            togglePopover()
+        }
+    }
+
+    @MainActor private func showContextMenu() {
+        guard let button = statusItem?.button else { return }
+        let menu = NSMenu()
+        let quitItem = NSMenuItem(
+            title: "Quit",
+            action: #selector(quitApp),
+            keyEquivalent: "q"
+        )
+        quitItem.target = self
+        menu.addItem(quitItem)
+        menu.popUp(
+            positioning: nil,
+            at: NSPoint(x: 0, y: button.bounds.maxY),
+            in: button
+        )
+    }
+
+    @MainActor @objc private func quitApp() {
+        NSApplication.shared.terminate(nil)
+    }
 
     @MainActor @objc private func togglePopover() {
         if let window = pinWindow {
