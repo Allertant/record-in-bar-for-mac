@@ -4,9 +4,12 @@ import SwiftUI
 struct EditorPageView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \AISummary.createdAt, order: .reverse) private var summaries: [AISummary]
+    @Query private var allNotes: [NoteItem]
+    @Query private var allSummaries: [AISummary]
 
     let topic: Topic?
     let note: NoteItem?
+    let onPersistChange: (UUID?) -> Void
     let onBack: () -> Void
     let onDelete: () -> Void
 
@@ -14,6 +17,9 @@ struct EditorPageView: View {
     @State private var isDeleteConfirmationVisible = false
     @State private var titleHeight: CGFloat = 44
     @State private var noteHeight: CGFloat = 260
+    @State private var draftTitle = ""
+    @State private var draftNote = ""
+    @State private var loadedTopicID: UUID?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -62,42 +68,42 @@ struct EditorPageView: View {
                 }
             }
 
-            if let topic {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
-                        PanelCard(tone: .editor) {
-                            VStack(alignment: .leading, spacing: 10) {
-                                RichTextFieldSection(
-                                    title: "标题",
-                                    text: titleBinding(for: topic),
-                                    height: $titleHeight,
-                                    minHeight: 38,
-                                    font: .systemFont(ofSize: 13, weight: .semibold),
-                                    isEditable: !isReadMode
-                                )
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    PanelCard(tone: .editor) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            RichTextFieldSection(
+                                title: "标题",
+                                text: titleBinding(for: topic),
+                                height: $titleHeight,
+                                minHeight: 38,
+                                font: .systemFont(ofSize: 13, weight: .semibold),
+                                isEditable: !isReadMode
+                            )
 
-                                if isReadMode {
-                                    RichTextFieldSection(
-                                        title: "笔记",
-                                        text: noteBinding(for: topic),
-                                        height: $noteHeight,
-                                        minHeight: max(220, noteHeight),
-                                        font: .systemFont(ofSize: 13),
-                                        isEditable: false
-                                    )
-                                } else {
-                                    RichTextFieldSection(
-                                        title: "笔记",
-                                        text: noteBinding(for: topic),
-                                        height: $noteHeight,
-                                        minHeight: 260,
-                                        font: .systemFont(ofSize: 13),
-                                        isEditable: true
-                                    )
-                                }
+                            if isReadMode {
+                                RichTextFieldSection(
+                                    title: "笔记",
+                                    text: noteBinding(for: topic),
+                                    height: $noteHeight,
+                                    minHeight: max(220, noteHeight),
+                                    font: .systemFont(ofSize: 13),
+                                    isEditable: false
+                                )
+                            } else {
+                                RichTextFieldSection(
+                                    title: "笔记",
+                                    text: noteBinding(for: topic),
+                                    height: $noteHeight,
+                                    minHeight: 260,
+                                    font: .systemFont(ofSize: 13),
+                                    isEditable: true
+                                )
                             }
                         }
+                    }
 
+                    if let topic {
                         HStack {
                             if topic.aiSummaryStatus == .failed, !topic.safeAISummaryErrorMessage.isEmpty {
                                 Text(topic.safeAISummaryErrorMessage)
@@ -152,56 +158,37 @@ struct EditorPageView: View {
                             }
                         }
                     }
-                    .padding(12)
                 }
-                .scrollIndicators(.hidden)
-                .background(
-                    Color(nsColor: .windowBackgroundColor)
-                        .contentShape(Rectangle())
-                        .onTapGesture { NSApp.keyWindow?.makeFirstResponder(nil) }
-                )
-            } else {
-                VStack {
-                    Spacer(minLength: 0)
-                    ContentUnavailableView(
-                        "暂无记录",
-                        systemImage: "square.and.pencil",
-                        description: Text("请先创建一条新记录。")
-                    )
-                    Spacer(minLength: 0)
-                }
+                .padding(12)
             }
+            .scrollIndicators(.hidden)
+            .background(
+                Color(nsColor: .windowBackgroundColor)
+                    .contentShape(Rectangle())
+                    .onTapGesture { NSApp.keyWindow?.makeFirstResponder(nil) }
+            )
+        }
+        .task(id: topic?.id) {
+            loadDraftIfNeeded()
         }
     }
 
-    private func titleBinding(for topic: Topic) -> Binding<String> {
+    private func titleBinding(for topic: Topic?) -> Binding<String> {
         Binding(
-            get: { topic.title },
+            get: { draftTitle },
             set: { newValue in
-                topic.title = newValue
-                topic.updatedAt = .now
-                try? modelContext.save()
+                draftTitle = newValue
+                persistDraft(existingTopic: topic)
             }
         )
     }
 
-    private func noteBinding(for topic: Topic) -> Binding<String> {
+    private func noteBinding(for topic: Topic?) -> Binding<String> {
         Binding(
-            get: { note?.content ?? "" },
+            get: { draftNote },
             set: { newValue in
-                let targetNote: NoteItem
-                if let note {
-                    targetNote = note
-                } else {
-                    let created = NoteItem(topicID: topic.id, content: "")
-                    modelContext.insert(created)
-                    targetNote = created
-                }
-
-                targetNote.content = newValue
-                targetNote.updatedAt = .now
-                topic.updatedAt = .now
-                try? modelContext.save()
+                draftNote = newValue
+                persistDraft(existingTopic: topic)
             }
         )
     }
@@ -218,6 +205,73 @@ struct EditorPageView: View {
 
     private func latestSummary(for topic: Topic) -> AISummary? {
         summaries.first(where: { $0.topicID == topic.id })
+    }
+
+    @MainActor
+    private func loadDraftIfNeeded() {
+        let currentID = topic?.id
+        guard loadedTopicID != currentID else { return }
+
+        loadedTopicID = currentID
+        draftTitle = topic?.title ?? ""
+        draftNote = note?.content ?? ""
+        isDeleteConfirmationVisible = false
+    }
+
+    @MainActor
+    private func persistDraft(existingTopic: Topic?) {
+        let trimmedTitle = draftTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedNote = draftNote.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard existingTopic != nil || !trimmedTitle.isEmpty || !trimmedNote.isEmpty else {
+            return
+        }
+
+        let targetTopic: Topic
+        if let existingTopic {
+            targetTopic = existingTopic
+        } else {
+            let createdTopic = Topic(title: trimmedTitle, kind: .other)
+            modelContext.insert(createdTopic)
+            targetTopic = createdTopic
+            loadedTopicID = createdTopic.id
+            onPersistChange(createdTopic.id)
+        }
+
+        targetTopic.title = draftTitle
+        targetTopic.updatedAt = .now
+
+        let existingNotes = allNotes
+            .filter { $0.topicID == targetTopic.id }
+            .sorted(using: KeyPathComparator(\.updatedAt, order: .reverse))
+
+        if let firstNote = existingNotes.first {
+            if trimmedNote.isEmpty {
+                modelContext.delete(firstNote)
+            } else {
+                firstNote.content = draftNote
+                firstNote.updatedAt = .now
+            }
+        } else if !trimmedNote.isEmpty {
+            let createdNote = NoteItem(topicID: targetTopic.id, content: draftNote)
+            modelContext.insert(createdNote)
+        }
+
+        if trimmedTitle.isEmpty && trimmedNote.isEmpty {
+            allNotes
+                .filter { $0.topicID == targetTopic.id }
+                .forEach(modelContext.delete)
+
+            allSummaries
+                .filter { $0.topicID == targetTopic.id }
+                .forEach(modelContext.delete)
+
+            modelContext.delete(targetTopic)
+            loadedTopicID = nil
+            onPersistChange(nil)
+        }
+
+        try? modelContext.save()
     }
 }
 

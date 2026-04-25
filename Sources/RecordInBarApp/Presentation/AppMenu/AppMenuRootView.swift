@@ -31,6 +31,7 @@ struct AppMenuRootView: View {
                 EditorPageView(
                     topic: selectedTopic,
                     note: editableNote,
+                    onPersistChange: { selectedTopicID = $0 },
                     onBack: { route = .main },
                     onDelete: deleteSelectedTopic
                 )
@@ -179,12 +180,7 @@ struct AppMenuRootView: View {
 
     @MainActor
     private func createTopicAndOpenEditor() {
-        let topic = Topic(title: "", kind: .other)
-        modelContext.insert(topic)
-        let note = NoteItem(topicID: topic.id, content: "")
-        modelContext.insert(note)
-        selectedTopicID = topic.id
-        try? modelContext.save()
+        selectedTopicID = nil
         route = .editor
     }
 
