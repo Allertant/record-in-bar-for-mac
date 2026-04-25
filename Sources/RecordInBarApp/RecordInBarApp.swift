@@ -47,6 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         let popover = NSPopover()
         popover.contentSize = NSSize(width: 360, height: 520)
         popover.behavior = .transient
+        popover.animates = false
         popover.delegate = self
 
         let modelContainer = PersistenceController.shared.container
