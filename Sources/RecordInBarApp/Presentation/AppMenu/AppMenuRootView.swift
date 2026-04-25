@@ -20,15 +20,8 @@ struct AppMenuRootView: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [
-                    Color(nsColor: .windowBackgroundColor),
-                    Color(nsColor: .controlBackgroundColor)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+            Color(nsColor: .windowBackgroundColor)
+                .ignoresSafeArea()
 
             switch route {
             case .main:
@@ -78,43 +71,52 @@ struct AppMenuRootView: View {
 
     private var mainPage: some View {
         VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("状态栏记录")
-                    .font(.system(size: 22, weight: .semibold))
+            PanelPageHeader(title: "状态栏记录") {
+                Color.clear.frame(width: 1, height: 1)
+            } trailing: {
+                Text("\(topics.count)")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
 
-                Button {
-                    createTopicAndOpenEditor()
-                } label: {
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Label("新建", systemImage: "square.and.pencil")
-                                .font(.system(size: 15, weight: .semibold))
-                            Spacer()
-                            Image(systemName: "arrow.right")
-                                .font(.system(size: 12, weight: .bold))
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    Button {
+                        createTopicAndOpenEditor()
+                    } label: {
+                        PanelCard(padding: 10) {
+                            HStack(spacing: 10) {
+                                Image(systemName: "square.and.pencil")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(Color.accentColor)
+
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text("新建记录")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(.primary)
+                                    Text("输入标题和笔记，内容实时保存。")
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                Spacer()
+
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
                         }
-
-                        Text("创建新记录后即可立即输入标题和笔记。")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .padding(16)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.white.opacity(0.75))
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .stroke(Color.black.opacity(0.06), lineWidth: 1)
-                    )
-                }
-                .buttonStyle(.plain)
+                    .buttonStyle(.plain)
 
-                TextField("搜索历史记录", text: $searchText)
-                    .textFieldStyle(.roundedBorder)
+                    CompactSearchField(title: "搜索历史记录", text: $searchText)
 
-                ScrollView {
-                    LazyVStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("历史记录")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.secondary)
+
+                        LazyVStack(spacing: 8) {
                         ForEach(filteredTopics) { topic in
                             HistoryCardView(
                                 topic: topic,
@@ -132,13 +134,19 @@ struct AppMenuRootView: View {
                                 description: Text("请先创建记录，或调整搜索关键词。")
                             )
                             .frame(maxWidth: .infinity)
-                            .padding(.top, 32)
+                            .padding(.top, 24)
                         }
                     }
-                    .padding(.vertical, 4)
+                    }
                 }
+                .padding(12)
+                .background(
+                    Color(nsColor: .windowBackgroundColor)
+                        .contentShape(Rectangle())
+                        .onTapGesture { NSApp.keyWindow?.makeFirstResponder(nil) }
+                )
             }
-            .padding(20)
+            .scrollIndicators(.hidden)
 
             Divider()
 
@@ -149,14 +157,13 @@ struct AppMenuRootView: View {
                     route = .settings
                 } label: {
                     Image(systemName: "gearshape")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.primary)
                 }
                 .buttonStyle(IconHoverButtonStyle())
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(.ultraThinMaterial)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
         }
     }
 
@@ -207,10 +214,11 @@ private struct HistoryCardView: View {
 
     var body: some View {
         Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 10) {
+            PanelCard(padding: 10) {
+            VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .top) {
                     Text(topic.title.nilIfEmpty ?? "未命名")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                         .lineLimit(1)
 
                     Spacer()
@@ -226,14 +234,8 @@ private struct HistoryCardView: View {
                     .lineLimit(3)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.white.opacity(0.72))
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color.black.opacity(0.06), lineWidth: 1)
-            )
+            }
         }
         .buttonStyle(.plain)
     }

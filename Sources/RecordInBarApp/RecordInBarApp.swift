@@ -13,7 +13,7 @@ struct RecordInBarApp: App {
     var body: some Scene {
         MenuBarExtra("状态栏记录", systemImage: "rectangle.stack.badge.plus") {
             AppMenuRootView()
-                .frame(width: 380, height: 560)
+                .frame(width: 360, height: 520)
                 .modelContainer(modelContainer)
         }
         .menuBarExtraStyle(.window)

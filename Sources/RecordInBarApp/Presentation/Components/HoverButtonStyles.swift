@@ -20,19 +20,19 @@ private struct HoverButtonBody: View {
 
     var body: some View {
         configuration.label
-            .padding(isPrimary ? .horizontal : .all, isPrimary ? 14 : 10)
-            .padding(isPrimary ? .vertical : .all, isPrimary ? 9 : 0)
+            .padding(isPrimary ? .horizontal : .all, isPrimary ? 10 : 6)
+            .padding(isPrimary ? .vertical : .all, isPrimary ? 6 : 0)
             .background(background)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
             .shadow(
-                color: isHovered ? Color.black.opacity(0.18) : .clear,
-                radius: isHovered ? 12 : 0,
+                color: isHovered ? Color.black.opacity(0.12) : .clear,
+                radius: isHovered ? 6 : 0,
                 x: 0,
-                y: isHovered ? 6 : 0
+                y: isHovered ? 2 : 0
             )
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
-            .animation(.easeOut(duration: 0.16), value: isHovered)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .animation(.easeOut(duration: 0.14), value: isHovered)
+            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
             .onHover { hovering in
                 isHovered = hovering
             }
@@ -42,10 +42,9 @@ private struct HoverButtonBody: View {
         Group {
             if isPrimary {
                 Color.accentColor
-                    .opacity(configuration.isPressed ? 0.75 : (isHovered ? 0.92 : 1))
+                    .opacity(configuration.isPressed ? 0.8 : (isHovered ? 0.92 : 0.88))
             } else {
-                Color.primary
-                    .opacity(isHovered ? 0.08 : 0.04)
+                Color.primary.opacity(isHovered ? 0.075 : 0.001)
             }
         }
     }

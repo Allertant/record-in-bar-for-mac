@@ -9,40 +9,62 @@ struct SettingsPageView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
+            PanelPageHeader(title: "设置") {
                 Button(action: onBack) {
-                    Label("返回", systemImage: "chevron.left")
-                        .font(.system(size: 13, weight: .semibold))
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
                 }
                 .buttonStyle(IconHoverButtonStyle())
-
-                Spacer()
+            } trailing: {
+                Color.clear.frame(width: 1, height: 1)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .background(.ultraThinMaterial)
 
             if let settings {
-                Form {
-                    Section("DeepSeek 配置") {
-                        SecureField("API Key", text: apiKeyBinding(for: settings))
-                            .textFieldStyle(.roundedBorder)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("DeepSeek 配置")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.secondary)
 
-                        Picker("模型", selection: binding(for: settings, keyPath: \.selectedModel)) {
-                            Text("极速版（deepseek-v4-flash）").tag("deepseek-v4-flash")
-                            Text("专业版（deepseek-v4-pro）").tag("deepseek-v4-pro")
-                        }
+                        PanelCard {
+                            VStack(alignment: .leading, spacing: 12) {
+                                CompactTextInput(title: "API Key", text: apiKeyBinding(for: settings))
 
-                        Toggle("启用思考模式", isOn: binding(for: settings, keyPath: \.thinkingEnabled))
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("模型")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(.secondary)
 
-                        Picker("推理强度", selection: binding(for: settings, keyPath: \.reasoningEffort)) {
-                            Text("低").tag("low")
-                            Text("中").tag("medium")
-                            Text("高").tag("high")
+                                    Picker("模型", selection: binding(for: settings, keyPath: \.selectedModel)) {
+                                        Text("极速版（deepseek-v4-flash）").tag("deepseek-v4-flash")
+                                        Text("专业版（deepseek-v4-pro）").tag("deepseek-v4-pro")
+                                    }
+                                    .pickerStyle(.menu)
+                                }
+
+                                Toggle("启用思考模式", isOn: binding(for: settings, keyPath: \.thinkingEnabled))
+                                    .font(.system(size: 12))
+
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("推理强度")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(.secondary)
+
+                                    Picker("推理强度", selection: binding(for: settings, keyPath: \.reasoningEffort)) {
+                                        Text("低").tag("low")
+                                        Text("中").tag("medium")
+                                        Text("高").tag("high")
+                                    }
+                                    .pickerStyle(.segmented)
+                                    .controlSize(.small)
+                                }
+                            }
                         }
                     }
+                    .padding(12)
                 }
-                .formStyle(.grouped)
+                .scrollIndicators(.hidden)
             } else {
                 ProgressView("正在加载设置...")
                     .task {

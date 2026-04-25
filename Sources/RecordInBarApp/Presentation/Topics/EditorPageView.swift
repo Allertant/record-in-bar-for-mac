@@ -11,52 +11,52 @@ struct EditorPageView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
+            PanelPageHeader(title: "编辑记录") {
+                Button(action: onBack) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(IconHoverButtonStyle())
+            } trailing: {
+                Button(role: .destructive, action: onDelete) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.red.opacity(0.78))
+                }
+                .buttonStyle(IconHoverButtonStyle())
+            }
 
             if let topic {
-                VStack(alignment: .leading, spacing: 16) {
-                    TextField("标题", text: titleBinding(for: topic))
-                        .textFieldStyle(.roundedBorder)
-                        .font(.system(size: 18, weight: .semibold))
-
-                    TextEditor(text: noteBinding(for: topic))
-                        .font(.system(size: 14))
-                        .padding(10)
-                        .background(Color.black.opacity(0.035))
-                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        PanelCard {
+                            VStack(alignment: .leading, spacing: 10) {
+                                CompactTextInput(title: "标题", text: titleBinding(for: topic))
+                                CompactTextEditorInput(title: "笔记", text: noteBinding(for: topic), minHeight: 300)
+                            }
+                        }
+                    }
+                    .padding(12)
+                }
+                .scrollIndicators(.hidden)
+                .background(
+                    Color(nsColor: .windowBackgroundColor)
+                        .contentShape(Rectangle())
+                        .onTapGesture { NSApp.keyWindow?.makeFirstResponder(nil) }
+                )
+            } else {
+                VStack {
+                    Spacer(minLength: 0)
+                    ContentUnavailableView(
+                        "暂无记录",
+                        systemImage: "square.and.pencil",
+                        description: Text("请先创建一条新记录。")
+                    )
                     Spacer(minLength: 0)
                 }
-                .padding(20)
-            } else {
-                ContentUnavailableView(
-                    "暂无记录",
-                    systemImage: "square.and.pencil",
-                    description: Text("请先创建一条新记录。")
-                )
             }
         }
-    }
-
-    private var header: some View {
-        HStack {
-            Button(action: onBack) {
-                Label("返回", systemImage: "chevron.left")
-                    .font(.system(size: 13, weight: .semibold))
-            }
-            .buttonStyle(IconHoverButtonStyle())
-
-            Spacer()
-
-            Button(role: .destructive, action: onDelete) {
-                Image(systemName: "trash")
-                    .font(.system(size: 14, weight: .semibold))
-            }
-            .buttonStyle(IconHoverButtonStyle())
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .background(.ultraThinMaterial)
     }
 
     private func titleBinding(for topic: Topic) -> Binding<String> {
