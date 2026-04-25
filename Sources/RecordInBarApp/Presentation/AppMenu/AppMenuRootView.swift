@@ -79,7 +79,7 @@ struct AppMenuRootView: View {
     private var mainPage: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Record in Bar")
+                Text("状态栏记录")
                     .font(.system(size: 22, weight: .semibold))
 
                 Button {
@@ -87,14 +87,14 @@ struct AppMenuRootView: View {
                 } label: {
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
-                            Label("New", systemImage: "square.and.pencil")
+                            Label("新建", systemImage: "square.and.pencil")
                                 .font(.system(size: 15, weight: .semibold))
                             Spacer()
                             Image(systemName: "arrow.right")
                                 .font(.system(size: 12, weight: .bold))
                         }
 
-                        Text("Create a new title and start typing notes immediately.")
+                        Text("创建新记录后即可立即输入标题和笔记。")
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -110,7 +110,7 @@ struct AppMenuRootView: View {
                 }
                 .buttonStyle(.plain)
 
-                TextField("Search history", text: $searchText)
+                TextField("搜索历史记录", text: $searchText)
                     .textFieldStyle(.roundedBorder)
 
                 ScrollView {
@@ -127,9 +127,9 @@ struct AppMenuRootView: View {
 
                         if filteredTopics.isEmpty {
                             ContentUnavailableView(
-                                "No History",
+                                "暂无历史记录",
                                 systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90",
-                                description: Text("Create a record or adjust your search.")
+                                description: Text("请先创建记录，或调整搜索关键词。")
                             )
                             .frame(maxWidth: .infinity)
                             .padding(.top, 32)
@@ -196,7 +196,7 @@ struct AppMenuRootView: View {
             .first?
             .content
             .trimmingCharacters(in: .whitespacesAndNewlines)
-            .nilIfEmpty ?? "No notes yet."
+            .nilIfEmpty ?? "暂无笔记"
     }
 }
 
@@ -209,7 +209,7 @@ private struct HistoryCardView: View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .top) {
-                    Text(topic.title.nilIfEmpty ?? "Untitled")
+                    Text(topic.title.nilIfEmpty ?? "未命名")
                         .font(.system(size: 14, weight: .semibold))
                         .lineLimit(1)
 

@@ -21,13 +21,13 @@ enum DeepSeekClientError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingAPIKey:
-            "DeepSeek API Key is missing."
+            "缺少 DeepSeek API Key。"
         case .emptyNotes:
-            "Add at least one note before running AI summary."
+            "请先至少输入一条笔记，再执行 AI 总结。"
         case .invalidResponse:
-            "DeepSeek returned an unexpected response."
+            "DeepSeek 返回了无法识别的结果。"
         case let .api(statusCode, message):
-            "DeepSeek API error (\(statusCode)): \(message)"
+            "DeepSeek API 错误（\(statusCode)）：\(message)"
         }
     }
 }

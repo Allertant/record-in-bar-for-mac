@@ -15,7 +15,7 @@ struct EditorPageView: View {
 
             if let topic {
                 VStack(alignment: .leading, spacing: 16) {
-                    TextField("Title", text: titleBinding(for: topic))
+                    TextField("标题", text: titleBinding(for: topic))
                         .textFieldStyle(.roundedBorder)
                         .font(.system(size: 18, weight: .semibold))
 
@@ -30,9 +30,9 @@ struct EditorPageView: View {
                 .padding(20)
             } else {
                 ContentUnavailableView(
-                    "No Record",
+                    "暂无记录",
                     systemImage: "square.and.pencil",
-                    description: Text("Create a new record first.")
+                    description: Text("请先创建一条新记录。")
                 )
             }
         }
@@ -41,7 +41,7 @@ struct EditorPageView: View {
     private var header: some View {
         HStack {
             Button(action: onBack) {
-                Label("Back", systemImage: "chevron.left")
+                Label("返回", systemImage: "chevron.left")
                     .font(.system(size: 13, weight: .semibold))
             }
             .buttonStyle(IconHoverButtonStyle())

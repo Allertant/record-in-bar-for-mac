@@ -11,7 +11,7 @@ struct SettingsPageView: View {
         VStack(spacing: 0) {
             HStack {
                 Button(action: onBack) {
-                    Label("Back", systemImage: "chevron.left")
+                    Label("返回", systemImage: "chevron.left")
                         .font(.system(size: 13, weight: .semibold))
                 }
                 .buttonStyle(IconHoverButtonStyle())
@@ -24,34 +24,27 @@ struct SettingsPageView: View {
 
             if let settings {
                 Form {
-                    Section("DeepSeek") {
+                    Section("DeepSeek 配置") {
                         SecureField("API Key", text: apiKeyBinding(for: settings))
                             .textFieldStyle(.roundedBorder)
 
-                        Picker("Model", selection: binding(for: settings, keyPath: \.selectedModel)) {
-                            Text("deepseek-v4-flash").tag("deepseek-v4-flash")
-                            Text("deepseek-v4-pro").tag("deepseek-v4-pro")
+                        Picker("模型", selection: binding(for: settings, keyPath: \.selectedModel)) {
+                            Text("极速版（deepseek-v4-flash）").tag("deepseek-v4-flash")
+                            Text("专业版（deepseek-v4-pro）").tag("deepseek-v4-pro")
                         }
 
-                        Toggle("Enable Thinking", isOn: binding(for: settings, keyPath: \.thinkingEnabled))
+                        Toggle("启用思考模式", isOn: binding(for: settings, keyPath: \.thinkingEnabled))
 
-                        Picker("Reasoning Effort", selection: binding(for: settings, keyPath: \.reasoningEffort)) {
-                            Text("low").tag("low")
-                            Text("medium").tag("medium")
-                            Text("high").tag("high")
+                        Picker("推理强度", selection: binding(for: settings, keyPath: \.reasoningEffort)) {
+                            Text("低").tag("low")
+                            Text("中").tag("medium")
+                            Text("高").tag("high")
                         }
-                    }
-
-                    Section("Storage") {
-                        Text("API Key is stored locally after Base64 encoding.")
-                            .foregroundStyle(.secondary)
-                        Text("Topics and notes are saved locally in real time.")
-                            .foregroundStyle(.secondary)
                     }
                 }
                 .formStyle(.grouped)
             } else {
-                ProgressView("Loading Settings...")
+                ProgressView("正在加载设置...")
                     .task {
                         SettingsBootstrap.ensureDefaultSettings(in: modelContext)
                     }

@@ -11,7 +11,7 @@ final class Topic {
 
     init(
         id: UUID = UUID(),
-        title: String = "Untitled Topic",
+        title: String = "未命名",
         kind: TopicKind = .other,
         createdAt: Date = .now,
         updatedAt: Date = .now

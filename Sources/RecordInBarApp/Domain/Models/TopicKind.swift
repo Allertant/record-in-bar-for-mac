@@ -11,17 +11,17 @@ enum TopicKind: String, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .video:
-            "Video"
+            "视频"
         case .novel:
-            "Novel"
+            "小说"
         case .article:
-            "Article"
+            "文章"
         case .podcast:
-            "Podcast"
+            "播客"
         case .idea:
-            "Idea"
+            "想法"
         case .other:
-            "Other"
+            "其他"
         }
     }
 }
