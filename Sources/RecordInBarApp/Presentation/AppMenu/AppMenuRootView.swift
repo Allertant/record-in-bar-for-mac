@@ -91,7 +91,7 @@ struct AppMenuRootView: View {
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(pinManager.isPinned ? .orange : .secondary)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(IconHoverButtonStyle())
                 .help(pinManager.isPinned ? "取消钉住" : "钉住面板")
             }
 
