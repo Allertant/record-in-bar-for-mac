@@ -41,6 +41,31 @@ struct DeepSeekClient {
         self.baseURL = baseURL
     }
 
+    func validateAPIKey(_ apiKey: String) async throws {
+        let token = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else {
+            throw DeepSeekClientError.missingAPIKey
+        }
+
+        var request = URLRequest(url: baseURL.appending(path: "/models"))
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw DeepSeekClientError.invalidResponse
+        }
+
+        guard (200 ... 299).contains(httpResponse.statusCode) else {
+            let apiError = try? JSONDecoder().decode(APIErrorEnvelope.self, from: data)
+            throw DeepSeekClientError.api(
+                statusCode: httpResponse.statusCode,
+                message: apiError?.error.message ?? "Unknown API error"
+            )
+        }
+    }
+
     func generateSummary(
         snapshot: TopicSummarySnapshot,
         apiKey: String,

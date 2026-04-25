@@ -7,6 +7,14 @@ struct SettingsPageView: View {
     let settings: AppSettings?
     let onBack: () -> Void
 
+    @State private var apiKeyDraft = ""
+    @State private var didLoadDraft = false
+    @State private var isValidating = false
+    @State private var validationMessage = ""
+    @State private var saveMessage = ""
+
+    private let deepSeekClient = DeepSeekClient()
+
     var body: some View {
         VStack(spacing: 0) {
             PanelPageHeader(title: "设置") {
@@ -29,7 +37,35 @@ struct SettingsPageView: View {
 
                         PanelCard {
                             VStack(alignment: .leading, spacing: 12) {
-                                CompactTextInput(title: "API Key", text: apiKeyBinding(for: settings))
+                                CompactSecureInput(title: "API Key", text: $apiKeyDraft)
+
+                                HStack(spacing: 8) {
+                                    Button("保存") {
+                                        saveAPIKey(for: settings)
+                                    }
+                                    .buttonStyle(PrimaryHoverButtonStyle())
+                                    .disabled(apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                                    Button(isValidating ? "验证中..." : "验证") {
+                                        Task {
+                                            await validateAPIKey()
+                                        }
+                                    }
+                                    .buttonStyle(IconProminentButtonStyle())
+                                    .disabled(isValidating || apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                                    if !saveMessage.isEmpty {
+                                        Text(saveMessage)
+                                            .font(.system(size: 11))
+                                            .foregroundStyle(.green)
+                                    }
+                                }
+
+                                if !validationMessage.isEmpty {
+                                    Text(validationMessage)
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(validationMessage.hasPrefix("验证通过") ? .green : .secondary)
+                                }
 
                                 VStack(alignment: .leading, spacing: 6) {
                                     Text("模型")
@@ -65,6 +101,13 @@ struct SettingsPageView: View {
                     .padding(12)
                 }
                 .scrollIndicators(.hidden)
+                .task(id: settings.persistentModelID) {
+                    guard !didLoadDraft else { return }
+                    settings.normalizeAPIKeyStorage()
+                    apiKeyDraft = settings.deepSeekAPIKey
+                    didLoadDraft = true
+                    try? modelContext.save()
+                }
             } else {
                 ProgressView("正在加载设置...")
                     .task {
@@ -74,15 +117,29 @@ struct SettingsPageView: View {
         }
     }
 
-    private func apiKeyBinding(for settings: AppSettings) -> Binding<String> {
-        Binding(
-            get: { settings.deepSeekAPIKey },
-            set: { newValue in
-                settings.deepSeekAPIKey = newValue
-                settings.updatedAt = .now
-                try? modelContext.save()
-            }
-        )
+    @MainActor
+    private func saveAPIKey(for settings: AppSettings) {
+        settings.deepSeekAPIKey = apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        settings.normalizeAPIKeyStorage()
+        settings.updatedAt = .now
+        try? modelContext.save()
+        saveMessage = "已保存"
+        validationMessage = ""
+    }
+
+    @MainActor
+    private func validateAPIKey() async {
+        isValidating = true
+        saveMessage = ""
+
+        do {
+            try await deepSeekClient.validateAPIKey(apiKeyDraft)
+            validationMessage = "验证通过：API Key 可用"
+        } catch {
+            validationMessage = "验证失败：\(error.localizedDescription)"
+        }
+
+        isValidating = false
     }
 
     private func binding<Value>(for settings: AppSettings, keyPath: ReferenceWritableKeyPath<AppSettings, Value>) -> Binding<Value> {
@@ -100,5 +157,16 @@ struct SettingsPageView: View {
 struct SettingsView: View {
     var body: some View {
         EmptyView()
+    }
+}
+
+private struct IconProminentButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12, weight: .medium))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.primary.opacity(configuration.isPressed ? 0.12 : 0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
     }
 }

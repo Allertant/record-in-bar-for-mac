@@ -13,4 +13,11 @@ enum Base64Coder {
         }
         return String(decoding: data, as: UTF8.self)
     }
+
+    static func isEncoded(_ string: String) -> Bool {
+        guard !string.isEmpty, let data = Data(base64Encoded: string) else {
+            return false
+        }
+        return Data(decode(string).utf8) == data
+    }
 }

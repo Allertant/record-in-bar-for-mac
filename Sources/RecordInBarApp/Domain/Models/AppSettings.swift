@@ -32,4 +32,14 @@ final class AppSettings {
         get { Base64Coder.decode(deepSeekAPIKeyBase64) }
         set { deepSeekAPIKeyBase64 = Base64Coder.encode(newValue) }
     }
+
+    var hasEncodedAPIKey: Bool {
+        Base64Coder.isEncoded(deepSeekAPIKeyBase64)
+    }
+
+    func normalizeAPIKeyStorage() {
+        guard !deepSeekAPIKeyBase64.isEmpty else { return }
+        guard !hasEncodedAPIKey else { return }
+        deepSeekAPIKeyBase64 = Base64Coder.encode(deepSeekAPIKeyBase64)
+    }
 }

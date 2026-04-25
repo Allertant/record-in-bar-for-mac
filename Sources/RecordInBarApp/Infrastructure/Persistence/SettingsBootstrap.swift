@@ -6,7 +6,15 @@ enum SettingsBootstrap {
         let descriptor = FetchDescriptor<AppSettings>()
 
         let existingSettings = (try? context.fetch(descriptor)) ?? []
-        guard existingSettings.isEmpty else { return }
+        if let existing = existingSettings.first {
+            let before = existing.deepSeekAPIKeyBase64
+            existing.normalizeAPIKeyStorage()
+            if existing.deepSeekAPIKeyBase64 != before {
+                existing.updatedAt = .now
+                try? context.save()
+            }
+            return
+        }
 
         context.insert(AppSettings())
         try? context.save()

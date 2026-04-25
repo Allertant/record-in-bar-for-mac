@@ -26,4 +26,16 @@ struct RecordInBarAppTests {
         #expect(settings.deepSeekAPIKeyBase64 != "sk-test-value")
         #expect(settings.deepSeekAPIKeyBase64 == Data("sk-test-value".utf8).base64EncodedString())
     }
+
+    @Test
+    func plaintextAPIKeyIsNormalizedToBase64() {
+        let settings = AppSettings()
+        settings.deepSeekAPIKeyBase64 = "sk-plain-text"
+
+        settings.normalizeAPIKeyStorage()
+
+        #expect(settings.deepSeekAPIKey == "sk-plain-text")
+        #expect(settings.deepSeekAPIKeyBase64 == Data("sk-plain-text".utf8).base64EncodedString())
+        #expect(settings.hasEncodedAPIKey)
+    }
 }
