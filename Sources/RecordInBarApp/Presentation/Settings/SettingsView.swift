@@ -35,7 +35,7 @@ struct SettingsPageView: View {
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(.secondary)
 
-                        PanelCard {
+                        PanelCard(tone: .settings) {
                             VStack(alignment: .leading, spacing: 12) {
                                 CompactSecureInput(title: "API Key", text: $apiKeyDraft)
 

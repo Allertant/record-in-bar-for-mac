@@ -65,7 +65,7 @@ struct EditorPageView: View {
             if let topic {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
-                        PanelCard {
+                        PanelCard(tone: .editor) {
                             VStack(alignment: .leading, spacing: 10) {
                                 RichTextFieldSection(
                                     title: "标题",
@@ -135,18 +135,20 @@ struct EditorPageView: View {
                         }
 
                         if let latestSummary = latestSummary(for: topic) {
-                            PanelCard {
+                            PanelCard(tone: .summary) {
                                 VStack(alignment: .leading, spacing: 8) {
                                     Text("AI 总结")
                                         .font(.system(size: 11, weight: .semibold))
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(PanelCardTone.summary.accent)
 
                                     Text(latestSummary.summaryText)
                                         .font(.system(size: 12))
                                         .foregroundStyle(.primary)
                                         .textSelection(.enabled)
                                         .lineSpacing(4)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
                                 }
+                                .frame(maxWidth: .infinity, minHeight: 92, alignment: .topLeading)
                             }
                         }
                     }

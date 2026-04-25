@@ -91,11 +91,11 @@ struct AppMenuRootView: View {
                     Button {
                         createTopicAndOpenEditor()
                     } label: {
-                        PanelCard(padding: 10) {
+                        PanelCard(padding: 10, tone: .create) {
                             HStack(spacing: 10) {
                                 Image(systemName: "square.and.pencil")
                                     .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(Color.accentColor)
+                                    .foregroundStyle(PanelCardTone.create.accent)
 
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text("新建记录")
@@ -129,7 +129,8 @@ struct AppMenuRootView: View {
                                 topic: topic,
                                 notePreview: previewText(for: topic),
                                 query: searchText,
-                                relativeTimeText: RelativeTimeFormatter.string(for: topic.updatedAt, reference: pageReferenceDate)
+                                relativeTimeText: RelativeTimeFormatter.string(for: topic.updatedAt, reference: pageReferenceDate),
+                                tone: historyTone(for: topic)
                             ) {
                                 selectedTopicID = topic.id
                                 route = .editor
@@ -214,6 +215,23 @@ struct AppMenuRootView: View {
             .searchPreview(for: searchText)
             .nilIfEmpty ?? "暂无笔记"
     }
+
+    private func historyTone(for topic: Topic) -> PanelCardTone {
+        switch topic.kind {
+        case .video:
+            .historyBlue
+        case .novel:
+            .historyRose
+        case .article:
+            .historyOrange
+        case .podcast:
+            .historyGreen
+        case .idea:
+            .historySlate
+        case .other:
+            .historyBlue
+        }
+    }
 }
 
 private struct HistoryCardView: View {
@@ -221,11 +239,12 @@ private struct HistoryCardView: View {
     let notePreview: String
     let query: String
     let relativeTimeText: String
+    let tone: PanelCardTone
     let onTap: () -> Void
 
     var body: some View {
         Button(action: onTap) {
-            PanelCard(padding: 10) {
+            PanelCard(padding: 10, tone: tone) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .top) {
                     HighlightedText(
@@ -240,7 +259,7 @@ private struct HistoryCardView: View {
 
                     Text(relativeTimeText)
                         .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(tone.accent.opacity(0.82))
                 }
 
                 HighlightedText(

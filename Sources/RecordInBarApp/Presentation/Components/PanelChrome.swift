@@ -1,21 +1,111 @@
 import SwiftUI
 
+enum PanelCardTone {
+    case neutral
+    case create
+    case historyBlue
+    case historyGreen
+    case historyOrange
+    case historyRose
+    case historySlate
+    case editor
+    case summary
+    case settings
+
+    var background: Color {
+        switch self {
+        case .neutral:
+            Color(nsColor: .controlBackgroundColor).opacity(0.72)
+        case .create:
+            Color(red: 0.87, green: 0.95, blue: 0.93).opacity(0.92)
+        case .historyBlue:
+            Color(red: 0.88, green: 0.93, blue: 0.99).opacity(0.9)
+        case .historyGreen:
+            Color(red: 0.89, green: 0.96, blue: 0.91).opacity(0.9)
+        case .historyOrange:
+            Color(red: 0.98, green: 0.93, blue: 0.86).opacity(0.92)
+        case .historyRose:
+            Color(red: 0.98, green: 0.9, blue: 0.92).opacity(0.9)
+        case .historySlate:
+            Color(red: 0.92, green: 0.94, blue: 0.97).opacity(0.9)
+        case .editor:
+            Color(red: 0.96, green: 0.94, blue: 0.9).opacity(0.9)
+        case .summary:
+            Color(red: 0.99, green: 0.95, blue: 0.84).opacity(0.94)
+        case .settings:
+            Color(red: 0.92, green: 0.95, blue: 0.98).opacity(0.9)
+        }
+    }
+
+    var border: Color {
+        switch self {
+        case .neutral:
+            Color.black.opacity(0.06)
+        case .create:
+            Color(red: 0.27, green: 0.62, blue: 0.52).opacity(0.22)
+        case .historyBlue:
+            Color(red: 0.3, green: 0.5, blue: 0.83).opacity(0.2)
+        case .historyGreen:
+            Color(red: 0.24, green: 0.62, blue: 0.35).opacity(0.2)
+        case .historyOrange:
+            Color(red: 0.82, green: 0.54, blue: 0.18).opacity(0.2)
+        case .historyRose:
+            Color(red: 0.76, green: 0.34, blue: 0.46).opacity(0.2)
+        case .historySlate:
+            Color(red: 0.39, green: 0.47, blue: 0.58).opacity(0.18)
+        case .editor:
+            Color(red: 0.62, green: 0.48, blue: 0.22).opacity(0.18)
+        case .summary:
+            Color(red: 0.82, green: 0.61, blue: 0.16).opacity(0.22)
+        case .settings:
+            Color(red: 0.29, green: 0.48, blue: 0.72).opacity(0.18)
+        }
+    }
+
+    var accent: Color {
+        switch self {
+        case .neutral:
+            .secondary
+        case .create:
+            Color(red: 0.19, green: 0.53, blue: 0.42)
+        case .historyBlue:
+            Color(red: 0.24, green: 0.46, blue: 0.78)
+        case .historyGreen:
+            Color(red: 0.2, green: 0.58, blue: 0.29)
+        case .historyOrange:
+            Color(red: 0.75, green: 0.46, blue: 0.14)
+        case .historyRose:
+            Color(red: 0.72, green: 0.28, blue: 0.42)
+        case .historySlate:
+            Color(red: 0.34, green: 0.42, blue: 0.53)
+        case .editor:
+            Color(red: 0.56, green: 0.42, blue: 0.18)
+        case .summary:
+            Color(red: 0.74, green: 0.52, blue: 0.08)
+        case .settings:
+            Color(red: 0.25, green: 0.42, blue: 0.69)
+        }
+    }
+}
+
 struct PanelCard<Content: View>: View {
     let padding: CGFloat
+    let tone: PanelCardTone
     @ViewBuilder let content: Content
 
-    init(padding: CGFloat = 10, @ViewBuilder content: () -> Content) {
+    init(padding: CGFloat = 10, tone: PanelCardTone = .neutral, @ViewBuilder content: () -> Content) {
         self.padding = padding
+        self.tone = tone
         self.content = content()
     }
 
     var body: some View {
         content
             .padding(padding)
-            .background(Color(nsColor: .controlBackgroundColor).opacity(0.72))
+            .background(tone.background)
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Color.black.opacity(0.06), lineWidth: 1)
+                    .stroke(tone.border, lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
