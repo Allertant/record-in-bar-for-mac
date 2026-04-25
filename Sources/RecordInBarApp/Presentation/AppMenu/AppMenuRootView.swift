@@ -8,6 +8,8 @@ struct AppMenuRootView: View {
     @Query private var summaries: [AISummary]
     @Query private var settings: [AppSettings]
 
+    @ObservedObject private var pinManager = PopoverPinManager.shared
+
     @State private var route: Route = .main
     @State private var selectedTopicID: UUID?
     @State private var searchText = ""
@@ -82,9 +84,15 @@ struct AppMenuRootView: View {
             PanelPageHeader(title: "状态栏记录") {
                 Color.clear.frame(width: 1, height: 1)
             } trailing: {
-                Text("\(topics.count)")
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                Button {
+                    pinManager.isPinned.toggle()
+                } label: {
+                    Image(systemName: pinManager.isPinned ? "pin.fill" : "pin")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(pinManager.isPinned ? .orange : .secondary)
+                }
+                .buttonStyle(.plain)
+                .help(pinManager.isPinned ? "取消钉住" : "钉住面板")
             }
 
             ScrollView {
