@@ -84,15 +84,7 @@ struct AppMenuRootView: View {
             PanelPageHeader(title: "状态栏记录") {
                 Color.clear.frame(width: 1, height: 1)
             } trailing: {
-                Button {
-                    pinManager.isPinned.toggle()
-                } label: {
-                    Image(systemName: pinManager.isPinned ? "pin.fill" : "pin")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(pinManager.isPinned ? .orange : .secondary)
-                }
-                .buttonStyle(IconHoverButtonStyle())
-                .help(pinManager.isPinned ? "取消钉住" : "钉住面板")
+                Color.clear.frame(width: 1, height: 1)
             }
 
             ScrollView {
@@ -169,8 +161,18 @@ struct AppMenuRootView: View {
 
             Divider()
 
-            HStack {
+            HStack(spacing: 4) {
                 Spacer()
+
+                Button {
+                    pinManager.isPinned.toggle()
+                } label: {
+                    Image(systemName: pinManager.isPinned ? "pin.fill" : "pin")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(pinManager.isPinned ? .orange : .secondary)
+                }
+                .buttonStyle(IconHoverButtonStyle())
+                .help(pinManager.isPinned ? "取消钉住" : "钉住面板")
 
                 Button {
                     route = .settings
