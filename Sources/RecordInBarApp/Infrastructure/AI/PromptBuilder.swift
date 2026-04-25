@@ -1,6 +1,7 @@
 import Foundation
 
 struct TopicSummarySnapshot: Sendable {
+    let topicID: UUID
     let title: String
     let kindLabel: String
     let noteContents: [String]
@@ -13,20 +14,17 @@ struct PromptBuilder {
             .joined(separator: "\n")
 
         let systemPrompt = """
-        You are an analysis assistant for a personal note-taking app.
-        Summarize the user's notes into exactly four sections:
-        1. One-sentence Summary
-        2. Key Points
-        3. Open Questions
-        4. Next Ideas
-        Keep the output concise and structured.
+        你是一个笔记整理助手。
+        你的任务是仅根据用户提供的内容，做客观、克制、压缩性的总结。
+        不要评价内容好坏，不要延伸推断，不要给建议，不要加入额外观点。
+        输出只保留总结正文，使用 2 到 4 个自然段，每段 1 到 3 句。
         """
 
         let userPrompt = """
-        Topic Title: \(snapshot.title)
-        Topic Type: \(snapshot.kindLabel)
+        标题：\(snapshot.title)
+        类型：\(snapshot.kindLabel)
 
-        Notes:
+        内容：
         \(notesBody)
         """
 

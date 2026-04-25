@@ -11,6 +11,7 @@ struct AppMenuRootView: View {
     @State private var route: Route = .main
     @State private var selectedTopicID: UUID?
     @State private var searchText = ""
+    @State private var pageReferenceDate = Date()
 
     private enum Route {
         case main
@@ -43,6 +44,12 @@ struct AppMenuRootView: View {
         }
         .task {
             SettingsBootstrap.ensureDefaultSettings(in: modelContext)
+            await AISummaryCoordinator.resumePendingJobs()
+        }
+        .onChange(of: route) { _, newValue in
+            if newValue == .main {
+                pageReferenceDate = .now
+            }
         }
     }
 
@@ -120,7 +127,9 @@ struct AppMenuRootView: View {
                         ForEach(filteredTopics) { topic in
                             HistoryCardView(
                                 topic: topic,
-                                notePreview: previewText(for: topic)
+                                notePreview: previewText(for: topic),
+                                query: searchText,
+                                relativeTimeText: RelativeTimeFormatter.string(for: topic.updatedAt, reference: pageReferenceDate)
                             ) {
                                 selectedTopicID = topic.id
                                 route = .editor
@@ -202,7 +211,7 @@ struct AppMenuRootView: View {
             .sorted(using: KeyPathComparator(\.updatedAt, order: .reverse))
             .first?
             .content
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .searchPreview(for: searchText)
             .nilIfEmpty ?? "暂无笔记"
     }
 }
@@ -210,6 +219,8 @@ struct AppMenuRootView: View {
 private struct HistoryCardView: View {
     let topic: Topic
     let notePreview: String
+    let query: String
+    let relativeTimeText: String
     let onTap: () -> Void
 
     var body: some View {
@@ -217,20 +228,27 @@ private struct HistoryCardView: View {
             PanelCard(padding: 10) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .top) {
-                    Text(topic.title.nilIfEmpty ?? "未命名")
-                        .font(.system(size: 13, weight: .semibold))
-                        .lineLimit(1)
+                    HighlightedText(
+                        topic.title.nilIfEmpty ?? "未命名",
+                        query: query,
+                        font: .system(size: 13, weight: .semibold),
+                        foregroundStyle: .primary
+                    )
+                    .lineLimit(2)
 
                     Spacer()
 
-                    Text(topic.updatedAt.formatted(date: .abbreviated, time: .shortened))
+                    Text(relativeTimeText)
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
 
-                Text(notePreview)
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
+                HighlightedText(
+                    notePreview,
+                    query: query,
+                    font: .system(size: 12),
+                    foregroundStyle: .secondary
+                )
                     .lineLimit(3)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -244,5 +262,26 @@ private struct HistoryCardView: View {
 private extension String {
     var nilIfEmpty: String? {
         trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : self
+    }
+
+    func searchPreview(for query: String) -> String {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { return trimmed }
+
+        let lowerText = trimmed.lowercased()
+        let lowerNeedle = needle.lowercased()
+        guard let range = lowerText.range(of: lowerNeedle) else { return trimmed }
+
+        let startOffset = max(0, lowerText.distance(from: lowerText.startIndex, to: range.lowerBound) - 22)
+        let endOffset = min(lowerText.count, lowerText.distance(from: lowerText.startIndex, to: range.upperBound) + 38)
+        let startIndex = trimmed.index(trimmed.startIndex, offsetBy: startOffset)
+        let endIndex = trimmed.index(trimmed.startIndex, offsetBy: endOffset)
+        let snippet = String(trimmed[startIndex..<endIndex]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let prefix = startOffset > 0 ? "…" : ""
+        let suffix = endOffset < trimmed.count ? "…" : ""
+        return prefix + snippet + suffix
     }
 }

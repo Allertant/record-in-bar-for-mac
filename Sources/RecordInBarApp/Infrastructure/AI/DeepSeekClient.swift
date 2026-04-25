@@ -1,15 +1,12 @@
 import Foundation
 
-struct DeepSeekMessage: Codable {
+struct DeepSeekMessage: Codable, Sendable {
     let role: String
     let content: String
 }
 
-struct DeepSeekSummaryResult {
+struct DeepSeekSummaryResult: Sendable {
     let summaryText: String
-    let keyPointsText: String
-    let questionsText: String
-    let nextIdeasText: String
 }
 
 enum DeepSeekClientError: LocalizedError {
@@ -92,58 +89,11 @@ struct DeepSeekClient {
             throw DeepSeekClientError.invalidResponse
         }
 
-        return Self.parseSummarySections(from: content)
-    }
-
-    private static func parseSummarySections(from content: String) -> DeepSeekSummaryResult {
-        let lines = content
-            .components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-
-        var currentSection = "summary"
-        var sections: [String: [String]] = [
-            "summary": [],
-            "keyPoints": [],
-            "questions": [],
-            "nextIdeas": []
-        ]
-
-        for line in lines {
-            let lowercased = line.lowercased()
-            if lowercased.contains("one-sentence summary") || lowercased.contains("summary") {
-                currentSection = "summary"
-                continue
-            }
-
-            if lowercased.contains("key points") {
-                currentSection = "keyPoints"
-                continue
-            }
-
-            if lowercased.contains("open questions") || lowercased.contains("questions") {
-                currentSection = "questions"
-                continue
-            }
-
-            if lowercased.contains("next ideas") || lowercased.contains("ideas") {
-                currentSection = "nextIdeas"
-                continue
-            }
-
-            sections[currentSection, default: []].append(line)
-        }
-
-        return DeepSeekSummaryResult(
-            summaryText: sections["summary"]?.joined(separator: "\n").nilIfEmpty ?? content,
-            keyPointsText: sections["keyPoints"]?.joined(separator: "\n").nilIfEmpty ?? "No key points returned.",
-            questionsText: sections["questions"]?.joined(separator: "\n").nilIfEmpty ?? "No open questions returned.",
-            nextIdeasText: sections["nextIdeas"]?.joined(separator: "\n").nilIfEmpty ?? "No next ideas returned."
-        )
+        return DeepSeekSummaryResult(summaryText: content.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 }
 
-private struct ChatCompletionRequest: Codable {
+private struct ChatCompletionRequest: Codable, Sendable {
     let model: String
     let messages: [DeepSeekMessage]
     let thinking: ThinkingPayload?
@@ -159,7 +109,7 @@ private struct ChatCompletionRequest: Codable {
     }
 }
 
-private struct ThinkingPayload: Codable {
+private struct ThinkingPayload: Codable, Sendable {
     let type: String
 }
 

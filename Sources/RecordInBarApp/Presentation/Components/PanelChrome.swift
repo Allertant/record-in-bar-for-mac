@@ -81,6 +81,8 @@ struct CompactSearchField: View {
 struct CompactTextInput: View {
     let title: String
     @Binding var text: String
+    var axis: Axis = .horizontal
+    var lineLimit: ClosedRange<Int> = 1...1
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -88,43 +90,12 @@ struct CompactTextInput: View {
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
 
-            TextField("", text: $text)
+            TextField("", text: $text, axis: axis)
                 .textFieldStyle(.plain)
                 .font(.system(size: 13))
+                .lineLimit(lineLimit)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
-                .background(Color(nsColor: .textBackgroundColor))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(Color.black.opacity(0.05), lineWidth: 1)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        }
-    }
-}
-
-struct CompactTextEditorInput: View {
-    let title: String
-    @Binding var text: String
-    let minHeight: CGFloat
-
-    init(title: String, text: Binding<String>, minHeight: CGFloat = 220) {
-        self.title = title
-        self._text = text
-        self.minHeight = minHeight
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
-
-            TextEditor(text: $text)
-                .font(.system(size: 13))
-                .scrollContentBackground(.hidden)
-                .padding(8)
-                .frame(minHeight: minHeight, alignment: .topLeading)
                 .background(Color(nsColor: .textBackgroundColor))
                 .overlay(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
