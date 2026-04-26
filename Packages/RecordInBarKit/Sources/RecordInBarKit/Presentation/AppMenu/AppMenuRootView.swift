@@ -27,24 +27,30 @@ public struct AppMenuRootView: View {
             Color(nsColor: .windowBackgroundColor)
                 .ignoresSafeArea()
 
-            switch route {
-            case .main:
-                mainPage
-            case .editor:
-                EditorPageView(
-                    topic: selectedTopic,
-                    note: editableNote,
-                    onPersistChange: { selectedTopicID = $0 },
-                    onBack: { route = .main },
-                    onDelete: deleteSelectedTopic
-                )
-            case .settings:
-                SettingsPageView(
-                    settings: settings.first,
-                    onBack: { route = .main }
-                )
-                .environment(\.modelContext, modelContext)
+            Group {
+                switch route {
+                case .main:
+                    mainPage
+                        .transition(.opacity)
+                case .editor:
+                    EditorPageView(
+                        topic: selectedTopic,
+                        note: editableNote,
+                        onPersistChange: { selectedTopicID = $0 },
+                        onBack: { navigate(to: .main) },
+                        onDelete: deleteSelectedTopic
+                    )
+                    .transition(.opacity)
+                case .settings:
+                    SettingsPageView(
+                        settings: settings.first,
+                        onBack: { navigate(to: .main) }
+                    )
+                    .environment(\.modelContext, modelContext)
+                    .transition(.opacity)
+                }
             }
+            .animation(.spring(response: 0.35, dampingFraction: 0.85), value: route)
         }
         .task {
             SettingsBootstrap.ensureDefaultSettings(in: modelContext)
@@ -60,6 +66,13 @@ public struct AppMenuRootView: View {
     private var appVersion: String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
         return "v\(version)"
+    }
+
+    @MainActor
+    private func navigate(to newRoute: Route) {
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+            route = newRoute
+        }
     }
 
     private var selectedTopic: Topic? {
@@ -140,7 +153,7 @@ public struct AppMenuRootView: View {
                                 tone: historyTone(for: topic)
                             ) {
                                 selectedTopicID = topic.id
-                                route = .editor
+                                navigate(to: .editor)
                             }
                         }
 
@@ -185,7 +198,7 @@ public struct AppMenuRootView: View {
                 .help(pinManager.isPinned ? "取消钉住" : "钉住面板")
 
                 Button {
-                    route = .settings
+                    navigate(to: .settings)
                 } label: {
                     Image(systemName: "gearshape")
                         .font(.system(size: 13, weight: .semibold))
@@ -201,7 +214,7 @@ public struct AppMenuRootView: View {
     @MainActor
     private func createTopicAndOpenEditor() {
         selectedTopicID = nil
-        route = .editor
+        navigate(to: .editor)
     }
 
     @MainActor
@@ -219,7 +232,7 @@ public struct AppMenuRootView: View {
         selectedTopicID = nil
         modelContext.delete(selectedTopic)
         try? modelContext.save()
-        route = .main
+        navigate(to: .main)
     }
 
     private func previewText(for topic: Topic) -> String {
