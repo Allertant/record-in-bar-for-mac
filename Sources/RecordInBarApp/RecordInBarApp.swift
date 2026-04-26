@@ -24,10 +24,12 @@ struct RecordInBarApp: App {
     }
 }
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSWindowDelegate {
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
     private var pinWindow: NSWindow?
+    private var eventMonitor: Any?
     private var cancellables = Set<AnyCancellable>()
     private var isTransitioning = false
 
@@ -59,6 +61,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
 
         NotificationCenter.default.addObserver(
             self,
+            selector: #selector(onPopoverDidShow(_:)),
+            name: NSPopover.didShowNotification,
+            object: popover
+        )
+
+        NotificationCenter.default.addObserver(
+            self,
             selector: #selector(onPopoverDidClose(_:)),
             name: NSPopover.didCloseNotification,
             object: popover
@@ -81,7 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
 
     // MARK: - Status bar toggle
 
-    @MainActor @objc private func handleStatusItemEvent() {
+    @objc private func handleStatusItemEvent() {
         guard let event = NSApp.currentEvent else {
             togglePopover()
             return
@@ -93,7 +102,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         }
     }
 
-    @MainActor private func showContextMenu() {
+    private func showContextMenu() {
         guard let button = statusItem?.button else { return }
         let menu = NSMenu()
         let quitItem = NSMenuItem(
@@ -110,11 +119,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         )
     }
 
-    @MainActor @objc private func quitApp() {
+    @objc private func quitApp() {
         NSApplication.shared.terminate(nil)
     }
 
-    @MainActor @objc private func togglePopover() {
+    @objc private func togglePopover() {
         if let window = pinWindow {
             window.close()
             return
@@ -132,13 +141,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         }
     }
 
-    // MARK: - Popover delegate
+    // MARK: - Popover notifications & monitoring
 
-    @MainActor @objc private func onPopoverDidClose(_ notification: Notification) {
+    @objc private func onPopoverDidShow(_ notification: Notification) {
+        startMonitoring()
+    }
+
+    @objc private func onPopoverDidClose(_ notification: Notification) {
+        stopMonitoring()
         if !isTransitioning {
             NSApp.deactivate()
         }
     }
+
+    private func startMonitoring() {
+        if eventMonitor == nil {
+            eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+                Task { @MainActor in
+                    self?.maybeClosePopover(event: event)
+                }
+            }
+        }
+    }
+
+    private func stopMonitoring() {
+        if let monitor = eventMonitor {
+            NSEvent.removeMonitor(monitor)
+            eventMonitor = nil
+        }
+    }
+
+    private func maybeClosePopover(event: NSEvent) {
+        guard let popover = popover, popover.isShown, !PopoverPinManager.shared.isPinned else { return }
+
+        let mouseLocation = NSEvent.mouseLocation // Screen coordinates (bottom-left origin)
+
+        // 1. If click is inside the popover window, don't close.
+        if let window = popover.contentViewController?.view.window {
+            if NSMouseInRect(mouseLocation, window.frame, false) {
+                return
+            }
+        }
+
+        // 2. If click is on the status bar button, let togglePopover handle it.
+        if let button = statusItem?.button, let window = button.window {
+            let buttonFrameInWindow = button.convert(button.bounds, to: nil)
+            let buttonFrameInScreen = window.convertToScreen(buttonFrameInWindow)
+            if NSMouseInRect(mouseLocation, buttonFrameInScreen, false) {
+                return
+            }
+        }
+
+        popover.close()
+    }
+
+    // MARK: - Popover delegate
 
     func popoverShouldClose(_ popover: NSPopover) -> Bool {
         if isTransitioning { return true }
@@ -148,15 +205,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     // MARK: - Window delegate
 
     func windowWillClose(_ notification: Notification) {
-        MainActor.assumeIsolated {
-            guard let window = notification.object as? NSWindow, window === pinWindow else { return }
-            PopoverPinManager.shared.isPinned = false
-        }
+        guard let window = notification.object as? NSWindow, window === pinWindow else { return }
+        PopoverPinManager.shared.isPinned = false
     }
 
     // MARK: - Transitions
 
-    @MainActor private func transitionToPinnedWindow() {
+    private func transitionToPinnedWindow() {
         guard let popover, let hostingController = popover.contentViewController else { return }
 
         let popoverFrame = hostingController.view.window?.frame
@@ -186,7 +241,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         pinWindow = window
     }
 
-    @MainActor private func transitionToPopover() {
+    private func transitionToPopover() {
         guard let window = pinWindow, let hostingController = window.contentViewController else { return }
 
         window.contentViewController = nil
