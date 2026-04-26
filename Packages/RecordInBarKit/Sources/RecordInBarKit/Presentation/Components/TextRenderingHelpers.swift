@@ -70,7 +70,7 @@ enum RelativeTimeFormatter {
 enum HistoryTimeFormatter {
     private static let formatter: DateFormatter = {
         let df = DateFormatter()
-        df.dateFormat = "yyyy年MM月"
+        df.dateFormat = "M月d日"
         return df
     }()
 
