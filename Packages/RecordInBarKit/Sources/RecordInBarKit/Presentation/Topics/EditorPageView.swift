@@ -36,7 +36,9 @@ struct EditorPageView: View {
             } trailing: {
                 HStack(spacing: 6) {
                     Button {
-                        isReadMode.toggle()
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                            isReadMode.toggle()
+                        }
                     } label: {
                         Image(systemName: isReadMode ? "square.and.pencil" : "book")
                             .font(.system(size: 12, weight: .semibold))
@@ -73,133 +75,95 @@ struct EditorPageView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    PanelCard(tone: .editor) {
-                        VStack(alignment: .leading, spacing: 10) {
-                            RichTextFieldSection(
-                                title: "标题",
-                                text: titleBinding(for: topic),
-                                height: $titleHeight,
-                                minHeight: 22,
-                                font: .systemFont(ofSize: 13, weight: .semibold),
-                                isEditable: !isReadMode,
-                                verticalPadding: 4
-                            )
-
-                            if isReadMode {
-                                ZStack(alignment: .topTrailing) {
-                                    RichTextFieldSection(
-                                        title: "笔记",
-                                        text: noteBinding(for: topic),
-                                        height: $noteHeight,
-                                        minHeight: max(220, noteHeight),
-                                        font: .systemFont(ofSize: 13),
-                                        isEditable: false,
-                                        onCopy: { copySummary(draftNote) }
-                                    )
-
-                                    if showCopiedToast {
-                                        CopyToastView(text: "已复制")
-                                            .padding(.top, -4)
-                                            .padding(.trailing, 28)
-                                            .transition(.move(edge: .top).combined(with: .opacity))
-                                    }
-                                }
-                            } else {
-                                ZStack(alignment: .topTrailing) {
-                                    RichTextFieldSection(
-                                        title: "笔记",
-                                        text: noteBinding(for: topic),
-                                        height: $noteHeight,
-                                        minHeight: 260,
-                                        font: .systemFont(ofSize: 13),
-                                        isEditable: true,
-                                        onCopy: { copySummary(draftNote) }
-                                    )
-
-                                    if showCopiedToast {
-                                        CopyToastView(text: "已复制")
-                                            .padding(.top, -4)
-                                            .padding(.trailing, 28)
-                                            .transition(.move(edge: .top).combined(with: .opacity))
-                                    }
-                                }
-                            }
+                    // Main Content Container (Title + Note)
+                    VStack(alignment: .leading, spacing: 12) {
+                        if isReadMode {
+                            readModeContent
+                                .transition(.opacity)
+                        } else {
+                            editModeContent
+                                .transition(.opacity)
                         }
                     }
+                    .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isReadMode)
+                    .layoutPriority(1)
 
+                    // AI Summary Section
                     if let topic {
-                        HStack {
-                            if topic.aiSummaryStatus == .failed, !topic.safeAISummaryErrorMessage.isEmpty {
-                                Text(topic.safeAISummaryErrorMessage)
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.red)
-                            } else if topic.aiSummaryStatus == .processing {
-                                HStack(spacing: 6) {
-                                    ProgressView()
-                                        .controlSize(.small)
-                                    Text("AI 正在总结中，关闭面板后会继续保留状态。")
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                if topic.aiSummaryStatus == .failed, !topic.safeAISummaryErrorMessage.isEmpty {
+                                    Text(topic.safeAISummaryErrorMessage)
                                         .font(.system(size: 11))
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-
-                            Spacer()
-
-                            Button {
-                                requestAISummary(for: topic)
-                            } label: {
-                                HStack(spacing: 6) {
-                                    if topic.aiSummaryStatus == .processing {
+                                        .foregroundStyle(.red)
+                                } else if topic.aiSummaryStatus == .processing {
+                                    HStack(spacing: 6) {
                                         ProgressView()
                                             .controlSize(.small)
-                                    } else {
-                                        Image(systemName: "sparkles")
+                                        Text("AI 正在总结中...")
+                                            .font(.system(size: 11))
+                                            .foregroundStyle(.secondary)
                                     }
-                                    Text(topic.aiSummaryStatus == .processing ? "总结中" : "AI 分析")
                                 }
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(.white)
+
+                                Spacer()
+
+                                Button {
+                                    requestAISummary(for: topic)
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        if topic.aiSummaryStatus == .processing {
+                                            ProgressView()
+                                                .controlSize(.small)
+                                        } else {
+                                            Image(systemName: "sparkles")
+                                        }
+                                        Text(topic.aiSummaryStatus == .processing ? "总结中" : "AI 分析")
+                                    }
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                }
+                                .buttonStyle(PrimaryHoverButtonStyle())
+                                .disabled(topic.aiSummaryStatus == .processing)
                             }
-                            .buttonStyle(PrimaryHoverButtonStyle())
-                            .disabled(topic.aiSummaryStatus == .processing)
-                        }
 
-                        if let latestSummary = latestSummary(for: topic) {
-                            PanelCard(tone: .summary) {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("AI 总结")
-                                        .font(.system(size: 11, weight: .semibold))
-                                        .foregroundStyle(PanelCardTone.summary.accent)
+                            if let latestSummary = latestSummary(for: topic) {
+                                PanelCard(tone: .summary) {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text("AI 总结")
+                                            .font(.system(size: 11, weight: .semibold))
+                                            .foregroundStyle(PanelCardTone.summary.accent)
 
-                                    Text(latestSummary.summaryText)
-                                        .font(.system(size: 12))
-                                        .foregroundStyle(.primary)
-                                        .textSelection(.enabled)
-                                        .lineSpacing(4)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        Text(latestSummary.summaryText)
+                                            .font(.system(size: 12))
+                                            .foregroundStyle(.primary)
+                                            .textSelection(.enabled)
+                                            .lineSpacing(4)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
 
-                                    HStack {
-                                        Spacer()
+                                        HStack {
+                                            Spacer()
 
-                                        ZStack(alignment: .bottomTrailing) {
-                                            if showCopiedToast {
-                                                CopyToastView(text: "已复制")
-                                                    .offset(y: -24)
-                                                    .transition(.move(edge: .top).combined(with: .opacity))
+                                            ZStack(alignment: .bottomTrailing) {
+                                                if showCopiedToast {
+                                                    CopyToastView(text: "已复制")
+                                                        .offset(y: -24)
+                                                        .transition(.move(edge: .top).combined(with: .opacity))
+                                                }
+
+                                                Button {
+                                                    copySummary(latestSummary.summaryText)
+                                                } label: {
+                                                    Image(systemName: "doc.on.doc")
+                                                        .font(.system(size: 11, weight: .semibold))
+                                                        .foregroundStyle(PanelCardTone.summary.accent)
+                                                }
+                                                .buttonStyle(IconHoverButtonStyle())
                                             }
-
-                                            Button {
-                                                copySummary(latestSummary.summaryText)
-                                            } label: {
-                                                Image(systemName: "doc.on.doc")
-                                                    .font(.system(size: 11, weight: .semibold))
-                                                    .foregroundStyle(PanelCardTone.summary.accent)
-                                            }
-                                            .buttonStyle(IconHoverButtonStyle())
                                         }
                                     }
+                                    .frame(maxWidth: .infinity, minHeight: 92, alignment: .topLeading)
                                 }
-                                .frame(maxWidth: .infinity, minHeight: 92, alignment: .topLeading)
                             }
                         }
                     }
@@ -216,6 +180,110 @@ struct EditorPageView: View {
         .task(id: topic?.id) {
             loadDraftIfNeeded()
         }
+    }
+
+    private var editModeContent: some View {
+        PanelCard(tone: .editor) {
+            VStack(alignment: .leading, spacing: 10) {
+                RichTextFieldSection(
+                    title: "标题",
+                    text: titleBinding(for: topic),
+                    height: $titleHeight,
+                    minHeight: 22,
+                    font: .systemFont(ofSize: 13, weight: .semibold),
+                    isEditable: true,
+                    verticalPadding: 4
+                )
+
+                ZStack(alignment: .topTrailing) {
+                    RichTextFieldSection(
+                        title: "笔记",
+                        text: noteBinding(for: topic),
+                        height: $noteHeight,
+                        minHeight: 260,
+                        font: .systemFont(ofSize: 13),
+                        isEditable: true,
+                        onCopy: { copySummary(draftNote) }
+                    )
+
+                    if showCopiedToast {
+                        CopyToastView(text: "已复制")
+                            .padding(.top, -4)
+                            .padding(.trailing, 28)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+                }
+            }
+        }
+    }
+
+    private var readModeContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(draftTitle.isEmpty ? "无标题" : draftTitle)
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(.primary)
+                
+                Spacer()
+                
+                if let topic = topic {
+                    Text("更新于 \(RelativeTimeFormatter.string(for: topic.updatedAt, reference: .now))")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .padding(.horizontal, 4)
+
+            Divider()
+                .opacity(0.6)
+
+            ZStack(alignment: .topTrailing) {
+                VStack(alignment: .leading, spacing: 8) {
+                    if draftNote.isEmpty {
+                        Text("暂无笔记内容")
+                            .font(.system(size: 13))
+                            .italic()
+                            .foregroundStyle(.tertiary)
+                    } else {
+                        Text(draftNote)
+                            .font(.system(size: 13))
+                            .lineSpacing(6)
+                            .foregroundStyle(.primary)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .padding(16)
+                .frame(minHeight: 280, alignment: .topLeading)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color(nsColor: .textBackgroundColor).opacity(0.4))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.primary.opacity(0.03), lineWidth: 1)
+                )
+
+                Button {
+                    copySummary(draftNote)
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary.opacity(0.6))
+                }
+                .buttonStyle(IconHoverButtonStyle())
+                .padding(8)
+
+                if showCopiedToast {
+                    CopyToastView(text: "已复制")
+                        .padding(.top, -12)
+                        .padding(.trailing, 32)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 8)
     }
 
     private func titleBinding(for topic: Topic?) -> Binding<String> {
@@ -295,8 +363,6 @@ struct EditorPageView: View {
             targetTopic = existingTopic
         } else if let loadedTopicID {
             guard let storedTopic = allTopics.first(where: { $0.id == loadedTopicID }) else {
-                // A draft topic was already created for this editing session.
-                // Wait for the query snapshot to include it instead of creating duplicates.
                 return
             }
             targetTopic = storedTopic
