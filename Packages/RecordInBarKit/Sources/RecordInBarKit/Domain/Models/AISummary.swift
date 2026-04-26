@@ -2,15 +2,15 @@ import Foundation
 import SwiftData
 
 @Model
-final class AISummary {
-    @Attribute(.unique) var id: UUID
-    var topicID: UUID
-    var model: String
-    var thinkingEnabled: Bool
-    var summaryText: String
-    var createdAt: Date
+public final class AISummary {
+    @Attribute(.unique) public var id: UUID
+    public var topicID: UUID
+    public var model: String
+    public var thinkingEnabled: Bool
+    public var summaryText: String
+    public var createdAt: Date
 
-    init(
+    public init(
         id: UUID = UUID(),
         topicID: UUID,
         model: String,

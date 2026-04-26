@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 import Testing
-@testable import RecordInBarApp
+@testable import RecordInBarKit
 
 @MainActor
 struct RecordInBarAppTests {

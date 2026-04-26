@@ -2,17 +2,17 @@ import Foundation
 import SwiftData
 
 @Model
-final class AppSettings {
-    static let singletonKey = "default"
+public final class AppSettings {
+    public static let singletonKey = "default"
 
-    @Attribute(.unique) var profile: String
-    var deepSeekAPIKeyBase64: String
-    var selectedModel: String
-    var thinkingEnabled: Bool
-    var reasoningEffort: String
-    var updatedAt: Date
+    @Attribute(.unique) public var profile: String
+    public var deepSeekAPIKeyBase64: String
+    public var selectedModel: String
+    public var thinkingEnabled: Bool
+    public var reasoningEffort: String
+    public var updatedAt: Date
 
-    init(
+    public init(
         profile: String = AppSettings.singletonKey,
         deepSeekAPIKey: String = "",
         selectedModel: String = "deepseek-v4-flash",
@@ -28,12 +28,12 @@ final class AppSettings {
         self.updatedAt = updatedAt
     }
 
-    var deepSeekAPIKey: String {
+    public var deepSeekAPIKey: String {
         get { Base64Coder.decode(deepSeekAPIKeyBase64) }
         set { deepSeekAPIKeyBase64 = Base64Coder.encode(newValue) }
     }
 
-    var hasEncodedAPIKey: Bool {
+    public var hasEncodedAPIKey: Bool {
         Base64Coder.isEncoded(deepSeekAPIKeyBase64)
     }
 

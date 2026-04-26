@@ -1,4 +1,4 @@
-enum TopicKind: String, CaseIterable, Identifiable {
+public enum TopicKind: String, CaseIterable, Identifiable {
     case video
     case novel
     case article
@@ -6,9 +6,9 @@ enum TopicKind: String, CaseIterable, Identifiable {
     case idea
     case other
 
-    var id: String { rawValue }
+    public var id: String { rawValue }
 
-    var label: String {
+    public var label: String {
         switch self {
         case .video:
             "视频"

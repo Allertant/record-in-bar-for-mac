@@ -1,24 +1,24 @@
 import Foundation
 import SwiftData
 
-enum AISummaryStatus: String, CaseIterable {
+public enum AISummaryStatus: String, CaseIterable {
     case idle
     case processing
     case failed
 }
 
 @Model
-final class Topic {
-    @Attribute(.unique) var id: UUID
-    var title: String
-    var kindRawValue: String
-    var aiSummaryStatusRawValue: String?
-    var aiSummaryRequestedAt: Date?
-    var aiSummaryErrorMessage: String?
-    var createdAt: Date
-    var updatedAt: Date
+public final class Topic {
+    @Attribute(.unique) public var id: UUID
+    public var title: String
+    public var kindRawValue: String
+    public var aiSummaryStatusRawValue: String?
+    public var aiSummaryRequestedAt: Date?
+    public var aiSummaryErrorMessage: String?
+    public var createdAt: Date
+    public var updatedAt: Date
 
-    init(
+    public init(
         id: UUID = UUID(),
         title: String = "未命名",
         kind: TopicKind = .other,
@@ -38,17 +38,17 @@ final class Topic {
         self.updatedAt = updatedAt
     }
 
-    var kind: TopicKind {
+    public var kind: TopicKind {
         get { TopicKind(rawValue: kindRawValue) ?? .other }
         set { kindRawValue = newValue.rawValue }
     }
 
-    var aiSummaryStatus: AISummaryStatus {
+    public var aiSummaryStatus: AISummaryStatus {
         get { AISummaryStatus(rawValue: aiSummaryStatusRawValue ?? "") ?? .idle }
         set { aiSummaryStatusRawValue = newValue.rawValue }
     }
 
-    var safeAISummaryErrorMessage: String {
+    public var safeAISummaryErrorMessage: String {
         get { aiSummaryErrorMessage ?? "" }
         set { aiSummaryErrorMessage = newValue }
     }

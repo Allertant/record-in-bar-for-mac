@@ -4,28 +4,7 @@ import SwiftData
 import SwiftUI
 
 @MainActor
-final class PopoverPinManager: ObservableObject {
-    static let shared = PopoverPinManager()
-    @Published var isPinned = false
-}
-
-@main
-struct RecordInBarApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-
-    init() {
-        NSApplication.shared.setActivationPolicy(.accessory)
-    }
-
-    var body: some Scene {
-        Settings {
-            EmptyView()
-        }
-    }
-}
-
-@MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSWindowDelegate {
+public final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSWindowDelegate {
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
     private var pinWindow: NSWindow?
@@ -33,7 +12,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     private var cancellables = Set<AnyCancellable>()
     private var isTransitioning = false
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
+    public override init() {
+        super.init()
+    }
+
+    public func applicationDidFinishLaunching(_ notification: Notification) {
         let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         self.statusItem = statusItem
 
@@ -197,14 +180,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
 
     // MARK: - Popover delegate
 
-    func popoverShouldClose(_ popover: NSPopover) -> Bool {
+    public func popoverShouldClose(_ popover: NSPopover) -> Bool {
         if isTransitioning { return true }
         return !PopoverPinManager.shared.isPinned
     }
 
     // MARK: - Window delegate
 
-    func windowWillClose(_ notification: Notification) {
+    public func windowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSWindow, window === pinWindow else { return }
         PopoverPinManager.shared.isPinned = false
     }

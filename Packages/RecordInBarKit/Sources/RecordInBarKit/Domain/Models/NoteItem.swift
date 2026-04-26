@@ -2,14 +2,14 @@ import Foundation
 import SwiftData
 
 @Model
-final class NoteItem {
-    @Attribute(.unique) var id: UUID
-    var topicID: UUID
-    var content: String
-    var createdAt: Date
-    var updatedAt: Date
+public final class NoteItem {
+    @Attribute(.unique) public var id: UUID
+    public var topicID: UUID
+    public var content: String
+    public var createdAt: Date
+    public var updatedAt: Date
 
-    init(
+    public init(
         id: UUID = UUID(),
         topicID: UUID,
         content: String,

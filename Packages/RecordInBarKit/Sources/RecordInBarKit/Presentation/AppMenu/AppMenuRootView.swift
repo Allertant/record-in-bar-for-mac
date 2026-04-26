@@ -1,7 +1,8 @@
 import SwiftData
 import SwiftUI
 
-struct AppMenuRootView: View {
+public struct AppMenuRootView: View {
+    public init() {}
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Topic.updatedAt, order: .reverse) private var topics: [Topic]
     @Query private var notes: [NoteItem]
@@ -21,7 +22,7 @@ struct AppMenuRootView: View {
         case settings
     }
 
-    var body: some View {
+    public var body: some View {
         ZStack {
             Color(nsColor: .windowBackgroundColor)
                 .ignoresSafeArea()
@@ -248,7 +249,7 @@ private struct HistoryCardView: View {
     let tone: PanelCardTone
     let onTap: () -> Void
 
-    var body: some View {
+    public var body: some View {
         Button(action: onTap) {
             PanelCard(padding: 10, tone: tone) {
             VStack(alignment: .leading, spacing: 8) {

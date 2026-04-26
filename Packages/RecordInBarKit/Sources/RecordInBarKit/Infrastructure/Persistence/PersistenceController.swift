@@ -2,12 +2,12 @@ import Foundation
 import SwiftData
 
 @MainActor
-enum PersistenceController {
+public enum PersistenceController {
     static let shared = SharedPersistenceController()
 }
 
-final class SharedPersistenceController {
-    let container: ModelContainer
+public final class SharedPersistenceController {
+    public let container: ModelContainer
 
     init(inMemory: Bool = false) {
         let schema = Schema([
