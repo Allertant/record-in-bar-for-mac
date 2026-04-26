@@ -23,6 +23,7 @@ struct EditorPageView: View {
     @State private var draftNote = ""
     @State private var loadedTopicID: UUID?
     @State private var showCopiedToast = false
+    @State private var headerReferenceDate = Date()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -33,11 +34,17 @@ struct EditorPageView: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(IconHoverButtonStyle())
+            } middle: {
+                if let topic = topic, !isReadMode {
+                    updateTimeHeader(for: topic)
+                        .padding(.leading, 8)
+                }
             } trailing: {
                 HStack(spacing: 6) {
                     Button {
                         withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
                             isReadMode.toggle()
+                            headerReferenceDate = .now
                         }
                     } label: {
                         Image(systemName: isReadMode ? "square.and.pencil" : "book")
@@ -408,6 +415,13 @@ struct EditorPageView: View {
         }
 
         try? modelContext.save()
+    }
+
+    private func updateTimeHeader(for topic: Topic) -> some View {
+        Text(RelativeTimeFormatter.string(for: topic.updatedAt, reference: headerReferenceDate))
+            .font(.system(size: 10))
+            .foregroundStyle(.tertiary)
+            .padding(.leading, -4)
     }
 }
 

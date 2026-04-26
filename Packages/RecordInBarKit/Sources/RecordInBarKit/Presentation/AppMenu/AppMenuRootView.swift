@@ -4,7 +4,7 @@ import SwiftUI
 public struct AppMenuRootView: View {
     public init() {}
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Topic.updatedAt, order: .reverse) private var topics: [Topic]
+    @Query(sort: \Topic.createdAt, order: .reverse) private var topics: [Topic]
     @Query private var notes: [NoteItem]
     @Query private var summaries: [AISummary]
     @Query private var settings: [AppSettings]
@@ -102,6 +102,8 @@ public struct AppMenuRootView: View {
         VStack(spacing: 0) {
             PanelPageHeader(title: "状态栏记录") {
                 Color.clear.frame(width: 1, height: 1)
+            } middle: {
+                EmptyView()
             } trailing: {
                 Color.clear.frame(width: 1, height: 1)
             }
@@ -149,7 +151,7 @@ public struct AppMenuRootView: View {
                                 topic: topic,
                                 notePreview: previewText(for: topic),
                                 query: searchText,
-                                relativeTimeText: RelativeTimeFormatter.string(for: topic.updatedAt, reference: pageReferenceDate),
+                                relativeTimeText: HistoryTimeFormatter.string(for: topic.createdAt),
                                 tone: historyTone(for: topic)
                             ) {
                                 selectedTopicID = topic.id

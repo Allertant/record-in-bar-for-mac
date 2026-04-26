@@ -66,3 +66,15 @@ enum RelativeTimeFormatter {
         }
     }
 }
+
+enum HistoryTimeFormatter {
+    private static let formatter: DateFormatter = {
+        let df = DateFormatter()
+        df.dateFormat = "yyyy年MM月"
+        return df
+    }()
+
+    static func string(for date: Date) -> String {
+        formatter.string(from: date)
+    }
+}

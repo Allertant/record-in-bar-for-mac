@@ -111,18 +111,21 @@ struct PanelCard<Content: View>: View {
     }
 }
 
-struct PanelPageHeader<Leading: View, Trailing: View>: View {
+struct PanelPageHeader<Leading: View, Middle: View, Trailing: View>: View {
     @ViewBuilder let leading: Leading
+    @ViewBuilder let middle: Middle
     @ViewBuilder let trailing: Trailing
     let title: String
 
     init(
         title: String,
-        @ViewBuilder leading: () -> Leading,
-        @ViewBuilder trailing: () -> Trailing
+        @ViewBuilder leading: () -> Leading = { EmptyView() },
+        @ViewBuilder middle: () -> Middle = { EmptyView() },
+        @ViewBuilder trailing: () -> Trailing = { EmptyView() }
     ) {
         self.title = title
         self.leading = leading()
+        self.middle = middle()
         self.trailing = trailing()
     }
 
@@ -130,9 +133,16 @@ struct PanelPageHeader<Leading: View, Trailing: View>: View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 leading
-                Text(title)
-                    .font(.system(size: 14, weight: .semibold))
+                
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(title)
+                        .font(.system(size: 14, weight: .semibold))
+                    
+                    middle
+                }
+                
                 Spacer()
+                
                 trailing
             }
             .padding(.horizontal, 14)

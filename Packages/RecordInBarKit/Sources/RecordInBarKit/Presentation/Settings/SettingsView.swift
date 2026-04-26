@@ -24,6 +24,8 @@ struct SettingsPageView: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(IconHoverButtonStyle())
+            } middle: {
+                EmptyView()
             } trailing: {
                 Color.clear.frame(width: 1, height: 1)
             }
