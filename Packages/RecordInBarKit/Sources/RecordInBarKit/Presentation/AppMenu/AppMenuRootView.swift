@@ -57,6 +57,11 @@ public struct AppMenuRootView: View {
         }
     }
 
+    private var appVersion: String {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+        return "v\(version)"
+    }
+
     private var selectedTopic: Topic? {
         guard let selectedTopicID else { return nil }
         return topics.first(where: { $0.id == selectedTopicID })
@@ -163,6 +168,10 @@ public struct AppMenuRootView: View {
             Divider()
 
             HStack(spacing: 4) {
+                Text(appVersion)
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.secondary)
+
                 Spacer()
 
                 Button {
