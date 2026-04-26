@@ -85,23 +85,43 @@ struct EditorPageView: View {
                             )
 
                             if isReadMode {
-                                RichTextFieldSection(
-                                    title: "笔记",
-                                    text: noteBinding(for: topic),
-                                    height: $noteHeight,
-                                    minHeight: max(220, noteHeight),
-                                    font: .systemFont(ofSize: 13),
-                                    isEditable: false
-                                )
+                                ZStack(alignment: .topTrailing) {
+                                    RichTextFieldSection(
+                                        title: "笔记",
+                                        text: noteBinding(for: topic),
+                                        height: $noteHeight,
+                                        minHeight: max(220, noteHeight),
+                                        font: .systemFont(ofSize: 13),
+                                        isEditable: false,
+                                        onCopy: { copySummary(draftNote) }
+                                    )
+
+                                    if showCopiedToast {
+                                        CopyToastView(text: "已复制")
+                                            .padding(.top, -4)
+                                            .padding(.trailing, 28)
+                                            .transition(.move(edge: .top).combined(with: .opacity))
+                                    }
+                                }
                             } else {
-                                RichTextFieldSection(
-                                    title: "笔记",
-                                    text: noteBinding(for: topic),
-                                    height: $noteHeight,
-                                    minHeight: 260,
-                                    font: .systemFont(ofSize: 13),
-                                    isEditable: true
-                                )
+                                ZStack(alignment: .topTrailing) {
+                                    RichTextFieldSection(
+                                        title: "笔记",
+                                        text: noteBinding(for: topic),
+                                        height: $noteHeight,
+                                        minHeight: 260,
+                                        font: .systemFont(ofSize: 13),
+                                        isEditable: true,
+                                        onCopy: { copySummary(draftNote) }
+                                    )
+
+                                    if showCopiedToast {
+                                        CopyToastView(text: "已复制")
+                                            .padding(.top, -4)
+                                            .padding(.trailing, 28)
+                                            .transition(.move(edge: .top).combined(with: .opacity))
+                                    }
+                                }
                             }
                         }
                     }
@@ -346,12 +366,26 @@ private struct RichTextFieldSection: View {
     let minHeight: CGFloat
     let font: NSFont
     let isEditable: Bool
+    var onCopy: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
+            HStack {
+                Text(title)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                
+                Spacer()
+                
+                if let onCopy {
+                    Button(action: onCopy) {
+                        Image(systemName: "doc.on.doc")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.secondary.opacity(0.8))
+                    }
+                    .buttonStyle(IconHoverButtonStyle())
+                }
+            }
 
             RichTextEditor(
                 text: $text,
