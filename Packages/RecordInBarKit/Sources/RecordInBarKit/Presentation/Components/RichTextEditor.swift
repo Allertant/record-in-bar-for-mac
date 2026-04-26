@@ -7,23 +7,26 @@ struct RichTextEditor: NSViewRepresentable {
     let minHeight: CGFloat
     let font: NSFont
     let isEditable: Bool
+    let verticalPadding: CGFloat
 
     init(
         text: Binding<String>,
         dynamicHeight: Binding<CGFloat>,
         minHeight: CGFloat,
         font: NSFont = .systemFont(ofSize: 13),
-        isEditable: Bool = true
+        isEditable: Bool = true,
+        verticalPadding: CGFloat = 6
     ) {
         self._text = text
         self._dynamicHeight = dynamicHeight
         self.minHeight = minHeight
         self.font = font
         self.isEditable = isEditable
+        self.verticalPadding = verticalPadding
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text, dynamicHeight: $dynamicHeight, minHeight: minHeight, font: font)
+        Coordinator(text: $text, dynamicHeight: $dynamicHeight, minHeight: minHeight, font: font, verticalPadding: verticalPadding)
     }
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -46,7 +49,7 @@ struct RichTextEditor: NSViewRepresentable {
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.drawsBackground = false
-        textView.textContainerInset = NSSize(width: 2, height: 2)
+        textView.textContainerInset = NSSize(width: 2, height: verticalPadding)
         textView.textContainer?.widthTracksTextView = true
         textView.textContainer?.lineFragmentPadding = 0
         textView.font = font
@@ -69,6 +72,7 @@ struct RichTextEditor: NSViewRepresentable {
         guard let textView = scrollView.documentView as? InterceptingTextView else { return }
         textView.isEditable = isEditable
         textView.font = font
+        textView.textContainerInset = NSSize(width: 2, height: verticalPadding)
         context.coordinator.applyTypingAttributes(to: textView)
         if textView.string != text {
             textView.string = text
@@ -84,12 +88,14 @@ struct RichTextEditor: NSViewRepresentable {
         @Binding private var dynamicHeight: CGFloat
         private let minHeight: CGFloat
         private let font: NSFont
+        private let verticalPadding: CGFloat
 
-        init(text: Binding<String>, dynamicHeight: Binding<CGFloat>, minHeight: CGFloat, font: NSFont) {
+        init(text: Binding<String>, dynamicHeight: Binding<CGFloat>, minHeight: CGFloat, font: NSFont, verticalPadding: CGFloat) {
             self._text = text
             self._dynamicHeight = dynamicHeight
             self.minHeight = minHeight
             self.font = font
+            self.verticalPadding = verticalPadding
         }
 
         func textDidChange(_ notification: Notification) {
@@ -135,7 +141,7 @@ struct RichTextEditor: NSViewRepresentable {
             textContainer.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
             layoutManager.ensureLayout(for: textContainer)
             let usedRect = layoutManager.usedRect(for: textContainer)
-            let nextHeight = max(minHeight, ceil(usedRect.height + textView.textContainerInset.height * 2 + 8))
+            let nextHeight = max(minHeight, ceil(usedRect.height + verticalPadding * 2))
             if abs(dynamicHeight - nextHeight) > 0.5 {
                 dynamicHeight = nextHeight
             }

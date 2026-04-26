@@ -17,7 +17,7 @@ struct EditorPageView: View {
 
     @State private var isReadMode = false
     @State private var isDeleteConfirmationVisible = false
-    @State private var titleHeight: CGFloat = 44
+    @State private var titleHeight: CGFloat = 22
     @State private var noteHeight: CGFloat = 260
     @State private var draftTitle = ""
     @State private var draftNote = ""
@@ -79,9 +79,10 @@ struct EditorPageView: View {
                                 title: "标题",
                                 text: titleBinding(for: topic),
                                 height: $titleHeight,
-                                minHeight: 38,
+                                minHeight: 22,
                                 font: .systemFont(ofSize: 13, weight: .semibold),
-                                isEditable: !isReadMode
+                                isEditable: !isReadMode,
+                                verticalPadding: 4
                             )
 
                             if isReadMode {
@@ -367,6 +368,7 @@ private struct RichTextFieldSection: View {
     let font: NSFont
     let isEditable: Bool
     var onCopy: (() -> Void)? = nil
+    var verticalPadding: CGFloat = 6
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -392,7 +394,8 @@ private struct RichTextFieldSection: View {
                 dynamicHeight: $height,
                 minHeight: minHeight,
                 font: font,
-                isEditable: isEditable
+                isEditable: isEditable,
+                verticalPadding: verticalPadding
             )
             .frame(height: max(minHeight, height))
             .padding(.horizontal, 8)
