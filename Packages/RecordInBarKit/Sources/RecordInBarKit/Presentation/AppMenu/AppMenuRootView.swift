@@ -15,6 +15,7 @@ public struct AppMenuRootView: View {
     @State private var selectedTopicID: UUID?
     @State private var searchText = ""
     @State private var pageReferenceDate = Date()
+    @State private var cachedKeywords: [String] = []
 
     private enum Route {
         case main
@@ -54,8 +55,12 @@ public struct AppMenuRootView: View {
         }
         .task {
             SettingsBootstrap.ensureDefaultSettings(in: modelContext)
+            refreshKeywords()
             await AISummaryCoordinator.resumePendingJobs()
             KeywordCoordinator.processPendingTopics()
+        }
+        .onChange(of: topics) { _, _ in
+            refreshKeywords()
         }
         .onChange(of: route) { _, newValue in
             if newValue == .main {
@@ -89,7 +94,7 @@ public struct AppMenuRootView: View {
             .first
     }
 
-    private var allKeywords: [String] {
+    private func refreshKeywords() {
         let weighted = topics.flatMap { topic -> [(String, Double)] in
             let age = Date().timeIntervalSince(topic.updatedAt)
             let weight = 1.0 / (1.0 + age / 3600.0)
@@ -97,12 +102,13 @@ public struct AppMenuRootView: View {
         }
         let grouped = Dictionary(grouping: weighted, by: \.0)
             .mapValues { $0.reduce(0) { $0 + $1.1 } }
-        return weightedPathSort(grouped)
-    }
 
-    private func weightedPathSort(_ weighted: [String: Double]) -> [String] {
+        let newSet = Set(grouped.keys)
+        let oldSet = Set(cachedKeywords)
+        guard newSet != oldSet else { return }
+
         var result: [String] = []
-        var remaining = weighted
+        var remaining = grouped
         while !remaining.isEmpty {
             let total = remaining.values.reduce(0, +)
             var r = Double.random(in: 0..<max(total, 0.001))
@@ -115,7 +121,7 @@ public struct AppMenuRootView: View {
                 }
             }
         }
-        return result
+        cachedKeywords = result
     }
 
     private var filteredTopics: [Topic] {
@@ -168,7 +174,7 @@ public struct AppMenuRootView: View {
                     }
                     .buttonStyle(.plain)
 
-                    CompactSearchField(title: "搜索历史记录", keywords: allKeywords, text: $searchText)
+                    CompactSearchField(title: "搜索历史记录", keywords: cachedKeywords, text: $searchText)
 
                     VStack(alignment: .leading, spacing: 8) {
                         Text("历史记录")
