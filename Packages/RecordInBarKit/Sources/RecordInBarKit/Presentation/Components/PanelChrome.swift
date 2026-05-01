@@ -178,6 +178,11 @@ struct CompactSearchField: View {
                     .foregroundStyle(.tertiary))
                     .textFieldStyle(.plain)
                     .font(.system(size: 12))
+                    .onSubmit {
+                        if text.isEmpty, let keyword = currentKeyword {
+                            text = keyword
+                        }
+                    }
             }
         }
         .padding(.horizontal, 10)
