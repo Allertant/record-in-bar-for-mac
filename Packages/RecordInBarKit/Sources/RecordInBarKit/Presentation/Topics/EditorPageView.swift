@@ -25,6 +25,7 @@ struct EditorPageView: View {
     @State private var showCopiedToast = false
     @State private var showShareSheet = false
     @State private var isGeneratingImage = false
+    @State private var showShareSuccess = false
     @State private var headerReferenceDate = Date()
 
     var body: some View {
@@ -293,6 +294,19 @@ struct EditorPageView: View {
                 }
             }
         }
+        .overlay {
+            if showShareSuccess {
+                Text("已复制到剪贴板")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(Color.black.opacity(0.78))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 4)
+                    .transition(.opacity)
+            }
+        }
         .task(id: topic?.id) {
             loadDraftIfNeeded()
         }
@@ -447,9 +461,9 @@ struct EditorPageView: View {
         }
         guard !text.isEmpty else { return }
 
-        let picker = NSSharingServicePicker(items: [text])
-        guard let contentView = NSApp.keyWindow?.contentView else { return }
-        picker.show(relativeTo: .zero, of: contentView, preferredEdge: .minY)
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
 
         showShareSuccessToast()
     }
@@ -468,7 +482,6 @@ struct EditorPageView: View {
         renderer.scale = 2.0
 
         Task { @MainActor in
-            // Defer slightly so the loading indicator renders first
             try? await Task.sleep(for: .milliseconds(100))
 
             guard let nsImage = renderer.nsImage else {
@@ -476,14 +489,14 @@ struct EditorPageView: View {
                 return
             }
 
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setData(nsImage.tiffRepresentation!, forType: .tiff)
+
             withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                 showShareSheet = false
                 isGeneratingImage = false
             }
-
-            let picker = NSSharingServicePicker(items: [nsImage])
-            guard let contentView = NSApp.keyWindow?.contentView else { return }
-            picker.show(relativeTo: .zero, of: contentView, preferredEdge: .minY)
 
             showShareSuccessToast()
         }
@@ -492,12 +505,12 @@ struct EditorPageView: View {
     @MainActor
     private func showShareSuccessToast() {
         withAnimation(.easeOut(duration: 0.18)) {
-            showCopiedToast = true
+            showShareSuccess = true
         }
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(1200))
             withAnimation(.easeIn(duration: 0.28)) {
-                showCopiedToast = false
+                showShareSuccess = false
             }
         }
     }
