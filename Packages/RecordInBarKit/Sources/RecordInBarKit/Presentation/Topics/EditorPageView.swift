@@ -244,33 +244,32 @@ struct EditorPageView: View {
             Divider()
                 .opacity(0.6)
 
-            ZStack(alignment: .topTrailing) {
-                VStack(alignment: .leading, spacing: 8) {
-                    if draftNote.isEmpty {
-                        Text("暂无笔记内容")
-                            .font(.system(size: 13))
-                            .italic()
-                            .foregroundStyle(.tertiary)
-                    } else {
-                        Text(draftNote)
-                            .font(.system(size: 13))
-                            .lineSpacing(6)
-                            .foregroundStyle(.primary)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
+            VStack(alignment: .leading, spacing: 8) {
+                if draftNote.isEmpty {
+                    Text("暂无笔记内容")
+                        .font(.system(size: 13))
+                        .italic()
+                        .foregroundStyle(.tertiary)
+                } else {
+                    Text(draftNote)
+                        .font(.system(size: 13))
+                        .lineSpacing(6)
+                        .foregroundStyle(.primary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(16)
-                .frame(minHeight: 280, alignment: .topLeading)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(nsColor: .textBackgroundColor).opacity(0.4))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.primary.opacity(0.03), lineWidth: 1)
-                )
-
+            }
+            .padding(16)
+            .frame(minHeight: 280, alignment: .topLeading)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(nsColor: .textBackgroundColor).opacity(0.4))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.primary.opacity(0.03), lineWidth: 1)
+            )
+            .overlay(alignment: .topTrailing) {
                 Button {
                     copySummary(draftNote)
                 } label: {
@@ -280,12 +279,13 @@ struct EditorPageView: View {
                 }
                 .buttonStyle(IconHoverButtonStyle())
                 .padding(8)
-
-                if showCopiedToast {
-                    CopyToastView(text: "已复制")
-                        .padding(.top, -12)
-                        .padding(.trailing, 32)
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                .overlay(alignment: .top) {
+                    if showCopiedToast {
+                        CopyToastView(text: "已复制")
+                            .fixedSize()
+                            .offset(y: -6)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
                 }
             }
         }
