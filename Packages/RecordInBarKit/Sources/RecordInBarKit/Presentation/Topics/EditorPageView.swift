@@ -315,35 +315,56 @@ struct EditorPageView: View {
                 Color.black.opacity(0.4)
                     .ignoresSafeArea()
                     .onTapGesture {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                            showImagePreview = false
-                            previewImage = nil
-                        }
+                        closeImagePreview()
                     }
 
-                ScrollView {
-                    VStack(spacing: 12) {
-                        Image(nsImage: nsImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                GeometryReader { geo in
+                    let available = geo.size
+                    let imgAspect = nsImage.size.width / nsImage.size.height
+                    let displayWidth = min(available.width - 32, nsImage.size.width)
+                    let displayHeight = displayWidth / imgAspect
+                    let needsScroll = displayHeight > available.height - 32
 
-                        Button("关闭预览") {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                                showImagePreview = false
-                                previewImage = nil
+                    if needsScroll {
+                        ScrollView {
+                            VStack(spacing: 12) {
+                                Image(nsImage: nsImage)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(width: displayWidth)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                                Button("关闭预览") { closeImagePreview() }
+                                    .buttonStyle(.plain)
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 8)
+                                    .background(Color.black.opacity(0.6))
+                                    .clipShape(Capsule())
                             }
+                            .padding(.vertical, 16)
+                            .frame(maxWidth: .infinity)
                         }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(Color.black.opacity(0.6))
-                        .clipShape(Capsule())
+                    } else {
+                        VStack(spacing: 12) {
+                            Image(nsImage: nsImage)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(width: displayWidth)
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                            Button("关闭预览") { closeImagePreview() }
+                                .buttonStyle(.plain)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(Color.black.opacity(0.6))
+                                .clipShape(Capsule())
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
-                    .padding(16)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 .transition(.opacity)
             }
@@ -543,9 +564,16 @@ struct EditorPageView: View {
                 previewImage = nsImage
                 showImagePreview = true
             }
-
-            showShareSuccessToast(message: "图片复制成功")
         }
+    }
+
+    @MainActor
+    private func closeImagePreview() {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+            showImagePreview = false
+            previewImage = nil
+        }
+        showShareSuccessToast(message: "图片复制成功")
     }
 
     @MainActor
