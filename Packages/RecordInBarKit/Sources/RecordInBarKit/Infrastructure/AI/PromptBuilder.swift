@@ -50,4 +50,32 @@ struct PromptBuilder {
             DeepSeekMessage(role: "user", content: userPrompt)
         ]
     }
+
+    static func buildKeywordMessages(for snapshot: TopicSummarySnapshot) -> [DeepSeekMessage] {
+        let notesBody = snapshot.noteContents
+            .map { "- \($0.trimmingCharacters(in: .whitespacesAndNewlines))" }
+            .joined(separator: "\n")
+
+        let systemPrompt = """
+        你是一个关键词提取助手。
+        根据用户提供的笔记标题和内容，提取 2 到 3 个关键词。
+        要求：
+        - 关键词简短、概括性强（如"旅行规划"、"读书笔记"、"会议纪要"）
+        - 用中文逗号分隔
+        - 只输出关键词本身，不要输出任何其他内容
+        - 不要使用引号、编号或其他格式
+        """
+
+        let userPrompt = """
+        标题：\(snapshot.title)
+
+        内容：
+        \(notesBody)
+        """
+
+        return [
+            DeepSeekMessage(role: "system", content: systemPrompt),
+            DeepSeekMessage(role: "user", content: userPrompt)
+        ]
+    }
 }

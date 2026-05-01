@@ -117,6 +117,54 @@ struct DeepSeekClient {
         return DeepSeekSummaryResult(summaryText: Self.sanitizeSummary(content))
     }
 
+    func generateKeywords(
+        snapshot: TopicSummarySnapshot,
+        apiKey: String,
+        model: String
+    ) async throws -> [String] {
+        let apiKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !apiKey.isEmpty else {
+            throw DeepSeekClientError.missingAPIKey
+        }
+
+        let payload = ChatCompletionRequest(
+            model: model,
+            messages: PromptBuilder.buildKeywordMessages(for: snapshot),
+            thinking: nil,
+            reasoningEffort: "low",
+            stream: false
+        )
+
+        var request = URLRequest(url: baseURL.appending(path: "/chat/completions"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONEncoder().encode(payload)
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw DeepSeekClientError.invalidResponse
+        }
+
+        guard (200 ... 299).contains(httpResponse.statusCode) else {
+            let apiError = try? JSONDecoder().decode(APIErrorEnvelope.self, from: data)
+            throw DeepSeekClientError.api(
+                statusCode: httpResponse.statusCode,
+                message: apiError?.error.message ?? "Unknown API error"
+            )
+        }
+
+        let completion = try JSONDecoder().decode(ChatCompletionResponse.self, from: data)
+        guard let content = completion.choices.first?.message.content else {
+            throw DeepSeekClientError.invalidResponse
+        }
+
+        return content
+            .components(separatedBy: CharacterSet(charactersIn: ",，、"))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
     private static func sanitizeSummary(_ raw: String) -> String {
         var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
 

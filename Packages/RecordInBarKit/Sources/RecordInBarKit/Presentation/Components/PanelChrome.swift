@@ -155,7 +155,16 @@ struct PanelPageHeader<Leading: View, Middle: View, Trailing: View>: View {
 
 struct CompactSearchField: View {
     let title: String
+    let keywords: [String]
     @Binding var text: String
+
+    @State private var currentIndex = 0
+    @State private var timer: Timer?
+
+    private var currentKeyword: String? {
+        guard !keywords.isEmpty else { return nil }
+        return keywords[currentIndex % keywords.count]
+    }
 
     var body: some View {
         HStack(spacing: 8) {
@@ -163,7 +172,7 @@ struct CompactSearchField: View {
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.secondary)
 
-            TextField(title, text: $text)
+            TextField(currentKeyword ?? title, text: $text)
                 .textFieldStyle(.plain)
                 .font(.system(size: 12))
         }
@@ -175,6 +184,43 @@ struct CompactSearchField: View {
                 .stroke(Color.black.opacity(0.05), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .onChange(of: text) { _, newValue in
+            if newValue.isEmpty {
+                startTimer()
+            } else {
+                stopTimer()
+            }
+        }
+        .onChange(of: keywords) { _, newValue in
+            if !newValue.isEmpty && text.isEmpty {
+                currentIndex = Int.random(in: 0..<newValue.count)
+                startTimer()
+            }
+        }
+        .onAppear {
+            if !keywords.isEmpty && text.isEmpty {
+                currentIndex = Int.random(in: 0..<keywords.count)
+                startTimer()
+            }
+        }
+        .onDisappear {
+            stopTimer()
+        }
+    }
+
+    private func startTimer() {
+        stopTimer()
+        guard !keywords.isEmpty else { return }
+        timer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
+            Task { @MainActor in
+                currentIndex = (currentIndex + 1) % keywords.count
+            }
+        }
+    }
+
+    private func stopTimer() {
+        timer?.invalidate()
+        timer = nil
     }
 }
 

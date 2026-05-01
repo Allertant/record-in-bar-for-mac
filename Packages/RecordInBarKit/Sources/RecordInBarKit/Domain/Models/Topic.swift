@@ -15,6 +15,8 @@ public final class Topic {
     public var aiSummaryStatusRawValue: String?
     public var aiSummaryRequestedAt: Date?
     public var aiSummaryErrorMessage: String?
+    public var keywordsData: Data?
+    public var keywordsGeneratedAt: Date?
     public var createdAt: Date
     public var updatedAt: Date
 
@@ -25,6 +27,8 @@ public final class Topic {
         aiSummaryStatus: AISummaryStatus = .idle,
         aiSummaryRequestedAt: Date? = nil,
         aiSummaryErrorMessage: String = "",
+        keywords: [String] = [],
+        keywordsGeneratedAt: Date? = nil,
         createdAt: Date = .now,
         updatedAt: Date = .now
     ) {
@@ -34,6 +38,8 @@ public final class Topic {
         self.aiSummaryStatusRawValue = aiSummaryStatus.rawValue
         self.aiSummaryRequestedAt = aiSummaryRequestedAt
         self.aiSummaryErrorMessage = aiSummaryErrorMessage
+        self.keywordsData = (try? JSONEncoder().encode(keywords))
+        self.keywordsGeneratedAt = keywordsGeneratedAt
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -51,5 +57,15 @@ public final class Topic {
     public var safeAISummaryErrorMessage: String {
         get { aiSummaryErrorMessage ?? "" }
         set { aiSummaryErrorMessage = newValue }
+    }
+
+    public var keywords: [String] {
+        get {
+            guard let data = keywordsData else { return [] }
+            return (try? JSONDecoder().decode([String].self, from: data)) ?? []
+        }
+        set {
+            keywordsData = try? JSONEncoder().encode(newValue)
+        }
     }
 }

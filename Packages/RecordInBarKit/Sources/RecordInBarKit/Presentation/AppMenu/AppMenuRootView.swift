@@ -55,6 +55,7 @@ public struct AppMenuRootView: View {
         .task {
             SettingsBootstrap.ensureDefaultSettings(in: modelContext)
             await AISummaryCoordinator.resumePendingJobs()
+            KeywordCoordinator.processPendingTopics()
         }
         .onChange(of: route) { _, newValue in
             if newValue == .main {
@@ -86,6 +87,35 @@ public struct AppMenuRootView: View {
             .filter { $0.topicID == selectedTopic.id }
             .sorted(using: KeyPathComparator(\.updatedAt, order: .reverse))
             .first
+    }
+
+    private var allKeywords: [String] {
+        let weighted = topics.flatMap { topic -> [(String, Double)] in
+            let age = Date().timeIntervalSince(topic.updatedAt)
+            let weight = 1.0 / (1.0 + age / 3600.0)
+            return topic.keywords.map { ($0, weight) }
+        }
+        let grouped = Dictionary(grouping: weighted, by: \.0)
+            .mapValues { $0.reduce(0) { $0 + $1.1 } }
+        return weightedPathSort(grouped)
+    }
+
+    private func weightedPathSort(_ weighted: [String: Double]) -> [String] {
+        var result: [String] = []
+        var remaining = weighted
+        while !remaining.isEmpty {
+            let total = remaining.values.reduce(0, +)
+            var r = Double.random(in: 0..<max(total, 0.001))
+            for (keyword, weight) in remaining {
+                r -= weight
+                if r <= 0 {
+                    result.append(keyword)
+                    remaining.removeValue(forKey: keyword)
+                    break
+                }
+            }
+        }
+        return result
     }
 
     private var filteredTopics: [Topic] {
@@ -138,7 +168,7 @@ public struct AppMenuRootView: View {
                     }
                     .buttonStyle(.plain)
 
-                    CompactSearchField(title: "搜索历史记录", text: $searchText)
+                    CompactSearchField(title: "搜索历史记录", keywords: allKeywords, text: $searchText)
 
                     VStack(alignment: .leading, spacing: 8) {
                         Text("历史记录")
