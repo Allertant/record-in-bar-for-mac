@@ -23,6 +23,7 @@ struct EditorPageView: View {
     @State private var draftNote = ""
     @State private var loadedTopicID: UUID?
     @State private var showCopiedToast = false
+    @State private var showShareSheet = false
     @State private var headerReferenceDate = Date()
 
     var body: some View {
@@ -41,6 +42,19 @@ struct EditorPageView: View {
                 }
             } trailing: {
                 HStack(spacing: 6) {
+                    if isReadMode {
+                        Button {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                                showShareSheet = true
+                            }
+                        } label: {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(IconHoverButtonStyle())
+                    }
+
                     Button {
                         withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
                             isReadMode.toggle()
@@ -183,6 +197,94 @@ struct EditorPageView: View {
                     .contentShape(Rectangle())
                     .onTapGesture { NSApp.keyWindow?.makeFirstResponder(nil) }
             )
+        }
+        .overlay {
+            if showShareSheet {
+                Color.black.opacity(0.25)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                            showShareSheet = false
+                        }
+                    }
+
+                VStack {
+                    Spacer()
+
+                    VStack(spacing: 0) {
+                        Button {
+                            // TODO: share text
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                                showShareSheet = false
+                            }
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "doc.text")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(.primary)
+                                    .frame(width: 20)
+
+                                Text("分享文字")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(.primary)
+
+                                Spacer()
+
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+
+                        Divider()
+                            .padding(.horizontal, 14)
+
+                        Button {
+                            // TODO: share image
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                                showShareSheet = false
+                            }
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "photo")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(.primary)
+                                    .frame(width: 20)
+
+                                Text("分享图片")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(.primary)
+
+                                Spacer()
+
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(Color(nsColor: .controlBackgroundColor))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 12)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
         }
         .task(id: topic?.id) {
             loadDraftIfNeeded()
