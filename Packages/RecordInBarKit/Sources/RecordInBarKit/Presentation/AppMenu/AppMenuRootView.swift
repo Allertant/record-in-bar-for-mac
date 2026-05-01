@@ -55,9 +55,10 @@ public struct AppMenuRootView: View {
         }
         .task {
             SettingsBootstrap.ensureDefaultSettings(in: modelContext)
+            KeywordCoordinator.resetAllKeywordsIfNeeded()
             refreshKeywords()
             await AISummaryCoordinator.resumePendingJobs()
-            KeywordCoordinator.processPendingTopics()
+            KeywordCoordinator.startPeriodicCheck()
         }
         .onChange(of: topics) { _, _ in
             refreshKeywords()

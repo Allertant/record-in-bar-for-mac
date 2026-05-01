@@ -3,6 +3,38 @@ import SwiftData
 
 enum KeywordCoordinator {
     private static let batchSize = 5
+    private static let interval: TimeInterval = 30 * 60 // 30 minutes
+    private static var timer: Timer?
+
+    @MainActor
+    static func startPeriodicCheck() {
+        processPendingTopics()
+        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { _ in
+            Task { @MainActor in
+                processPendingTopics()
+            }
+        }
+    }
+
+    static func stopPeriodicCheck() {
+        timer?.invalidate()
+        timer = nil
+    }
+
+    @MainActor
+    static func resetAllKeywordsIfNeeded() {
+        let key = "RecordInBar.KeywordsDidResetV1"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        UserDefaults.standard.set(true, forKey: key)
+
+        let context = ModelContext(PersistenceController.shared.container)
+        let topics = (try? context.fetch(FetchDescriptor<Topic>())) ?? []
+        for topic in topics {
+            topic.keywords = []
+            topic.keywordsGeneratedAt = nil
+        }
+        try? context.save()
+    }
 
     @MainActor
     static func processPendingTopics() {
