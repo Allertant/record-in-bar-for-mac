@@ -26,6 +26,9 @@ struct EditorPageView: View {
     @State private var showShareSheet = false
     @State private var isGeneratingImage = false
     @State private var showShareSuccess = false
+    @State private var shareSuccessMessage = ""
+    @State private var previewImage: NSImage?
+    @State private var showImagePreview = false
     @State private var headerReferenceDate = Date()
 
     var body: some View {
@@ -296,7 +299,7 @@ struct EditorPageView: View {
         }
         .overlay {
             if showShareSuccess {
-                Text("已复制到剪贴板")
+                Text(shareSuccessMessage)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 16)
@@ -305,6 +308,44 @@ struct EditorPageView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 4)
                     .transition(.opacity)
+            }
+        }
+        .overlay {
+            if showImagePreview, let nsImage = previewImage {
+                Color.black.opacity(0.4)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                            showImagePreview = false
+                            previewImage = nil
+                        }
+                    }
+
+                ScrollView {
+                    VStack(spacing: 12) {
+                        Image(nsImage: nsImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                        Button("关闭预览") {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                                showImagePreview = false
+                                previewImage = nil
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.black.opacity(0.6))
+                        .clipShape(Capsule())
+                    }
+                    .padding(16)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .transition(.opacity)
             }
         }
         .task(id: topic?.id) {
@@ -465,7 +506,10 @@ struct EditorPageView: View {
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
 
-        showShareSuccessToast()
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+            showShareSheet = false
+        }
+        showShareSuccessToast(message: "文字复制成功")
     }
 
     @MainActor
@@ -496,14 +540,17 @@ struct EditorPageView: View {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                 showShareSheet = false
                 isGeneratingImage = false
+                previewImage = nsImage
+                showImagePreview = true
             }
 
-            showShareSuccessToast()
+            showShareSuccessToast(message: "图片复制成功")
         }
     }
 
     @MainActor
-    private func showShareSuccessToast() {
+    private func showShareSuccessToast(message: String) {
+        shareSuccessMessage = message
         withAnimation(.easeOut(duration: 0.18)) {
             showShareSuccess = true
         }
