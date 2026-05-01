@@ -511,6 +511,11 @@ struct EditorPageView: View {
         draftTitle = topic?.title ?? ""
         draftNote = note?.content ?? ""
         isDeleteConfirmationVisible = false
+
+        // Existing topic with content → read mode; new topic → edit mode
+        let hasContent = !(topic?.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !(note?.content ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        isReadMode = topic != nil && hasContent
     }
 
     @MainActor
