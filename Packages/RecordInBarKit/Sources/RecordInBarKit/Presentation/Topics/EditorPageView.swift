@@ -478,7 +478,11 @@ struct EditorPageView: View {
         guard !draftTitle.isEmpty || !draftNote.isEmpty else { return }
         isGeneratingImage = true
 
-        let card = ShareableNoteCard(title: draftTitle, note: draftNote)
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy/MM/dd HH:mm"
+        let timeString = dateFormatter.string(from: Date())
+
+        let card = ShareableNoteCard(title: draftTitle, note: draftNote, time: timeString)
         let renderer = ImageRenderer(content: card)
         renderer.scale = 2.0
 
@@ -665,6 +669,7 @@ private struct RichTextFieldSection: View {
 private struct ShareableNoteCard: View {
     let title: String
     let note: String
+    let time: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -677,6 +682,13 @@ private struct ShareableNoteCard: View {
                     .font(.system(size: 14))
                     .lineSpacing(6)
                     .foregroundStyle(.primary)
+            }
+
+            HStack {
+                Spacer()
+                Text(time)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.gray)
             }
         }
         .padding(28)
