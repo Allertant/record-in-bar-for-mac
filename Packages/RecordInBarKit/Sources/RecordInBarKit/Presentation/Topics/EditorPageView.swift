@@ -24,6 +24,7 @@ struct EditorPageView: View {
     @State private var loadedTopicID: UUID?
     @State private var showCopiedToast = false
     @State private var showShareSheet = false
+    @State private var isGeneratingImage = false
     @State private var headerReferenceDate = Date()
 
     var body: some View {
@@ -213,7 +214,7 @@ struct EditorPageView: View {
 
                     VStack(spacing: 0) {
                         Button {
-                            // TODO: share text
+                            shareText()
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                                 showShareSheet = false
                             }
@@ -244,10 +245,7 @@ struct EditorPageView: View {
                             .padding(.horizontal, 14)
 
                         Button {
-                            // TODO: share image
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                                showShareSheet = false
-                            }
+                            generateAndShareImage()
                         } label: {
                             HStack(spacing: 10) {
                                 Image(systemName: "photo")
@@ -255,9 +253,17 @@ struct EditorPageView: View {
                                     .foregroundStyle(.primary)
                                     .frame(width: 20)
 
-                                Text("分享图片")
-                                    .font(.system(size: 13, weight: .medium))
-                                    .foregroundStyle(.primary)
+                                if isGeneratingImage {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                    Text("生成中...")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundStyle(.secondary)
+                                } else {
+                                    Text("分享图片")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundStyle(.primary)
+                                }
 
                                 Spacer()
 
@@ -270,6 +276,7 @@ struct EditorPageView: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .disabled(isGeneratingImage)
                     }
                     .background(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -448,6 +455,69 @@ struct EditorPageView: View {
     }
 
     @MainActor
+    private func shareText() {
+        var text = ""
+        if !draftTitle.isEmpty {
+            text += draftTitle
+        }
+        if !draftNote.isEmpty {
+            if !text.isEmpty { text += "\n\n" }
+            text += draftNote
+        }
+        guard !text.isEmpty else { return }
+
+        let picker = NSSharingServicePicker(items: [text])
+        guard let contentView = NSApp.keyWindow?.contentView else { return }
+        picker.show(relativeTo: .zero, of: contentView, preferredEdge: .minY)
+
+        showShareSuccessToast()
+    }
+
+    @MainActor
+    private func generateAndShareImage() {
+        guard !draftTitle.isEmpty || !draftNote.isEmpty else { return }
+        isGeneratingImage = true
+
+        let card = ShareableNoteCard(title: draftTitle, note: draftNote)
+        let renderer = ImageRenderer(content: card)
+        renderer.scale = 2.0
+
+        Task { @MainActor in
+            // Defer slightly so the loading indicator renders first
+            try? await Task.sleep(for: .milliseconds(100))
+
+            guard let nsImage = renderer.nsImage else {
+                isGeneratingImage = false
+                return
+            }
+
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                showShareSheet = false
+                isGeneratingImage = false
+            }
+
+            let picker = NSSharingServicePicker(items: [nsImage])
+            guard let contentView = NSApp.keyWindow?.contentView else { return }
+            picker.show(relativeTo: .zero, of: contentView, preferredEdge: .minY)
+
+            showShareSuccessToast()
+        }
+    }
+
+    @MainActor
+    private func showShareSuccessToast() {
+        withAnimation(.easeOut(duration: 0.18)) {
+            showCopiedToast = true
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(1200))
+            withAnimation(.easeIn(duration: 0.28)) {
+                showCopiedToast = false
+            }
+        }
+    }
+
+    @MainActor
     private func loadDraftIfNeeded() {
         let currentID = topic?.id
         guard loadedTopicID != currentID else { return }
@@ -558,9 +628,9 @@ private struct RichTextFieldSection: View {
                 Text(title)
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
-                
+
                 Spacer()
-                
+
                 if let onCopy {
                     Button(action: onCopy) {
                         Image(systemName: "doc.on.doc")
@@ -589,5 +659,28 @@ private struct RichTextFieldSection: View {
             )
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
+    }
+}
+
+private struct ShareableNoteCard: View {
+    let title: String
+    let note: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(title.isEmpty ? "无标题" : title)
+                .font(.system(size: 20, weight: .bold))
+                .foregroundStyle(.primary)
+
+            if !note.isEmpty {
+                Text(note)
+                    .font(.system(size: 14))
+                    .lineSpacing(6)
+                    .foregroundStyle(.primary)
+            }
+        }
+        .padding(28)
+        .frame(width: 400, alignment: .topLeading)
+        .background(Color.white)
     }
 }
