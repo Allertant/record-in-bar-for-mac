@@ -378,25 +378,6 @@ struct EditorPageView: View {
                 RoundedRectangle(cornerRadius: 12)
                     .stroke(Color.primary.opacity(0.03), lineWidth: 1)
             )
-            .overlay(alignment: .topTrailing) {
-                Button {
-                    copySummary(draftNote)
-                } label: {
-                    Image(systemName: "doc.on.doc")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.secondary.opacity(0.6))
-                }
-                .buttonStyle(IconHoverButtonStyle())
-                .padding(8)
-                .overlay(alignment: .top) {
-                    if showCopiedToast {
-                        CopyToastView(text: "已复制")
-                            .fixedSize()
-                            .offset(y: -6)
-                            .transition(.move(edge: .top).combined(with: .opacity))
-                    }
-                }
-            }
         }
         .padding(.horizontal, 4)
         .padding(.vertical, 8)
