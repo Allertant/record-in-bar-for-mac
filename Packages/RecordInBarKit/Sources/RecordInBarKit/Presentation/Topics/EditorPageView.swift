@@ -204,7 +204,7 @@ struct EditorPageView: View {
     private var modalOverlay: some View {
         ZStack {
             Button { dismissAllModals() } label: {
-                Color.black.opacity(hasActiveModal ? 0.08 : 0)
+                Color.black.opacity(hasActiveModal ? 0.25 : 0)
                     .ignoresSafeArea()
             }
             .buttonStyle(.plain)
@@ -224,7 +224,7 @@ struct EditorPageView: View {
                     onDelete()
                 }
             )
-            .background(.ultraThinMaterial)
+            .background(.regularMaterial)
             .opacity(showDeleteConfirmation ? 1 : 0)
 
             imagePreviewPanel
