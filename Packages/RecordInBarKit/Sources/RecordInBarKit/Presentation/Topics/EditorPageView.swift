@@ -17,7 +17,7 @@ struct EditorPageView: View {
     let onBack: () -> Void
     let onDelete: () -> Void
 
-    @State private var isDeleteConfirmationVisible = false
+    @State private var showDeleteConfirmation = false
     @State private var draftTitle = ""
     @State private var draftNote = ""
     @State private var loadedTopicID: UUID?
@@ -72,30 +72,14 @@ struct EditorPageView: View {
                     }
                     .buttonStyle(IconHoverButtonStyle())
 
-                    if isDeleteConfirmationVisible {
-                        Button("取消") {
-                            isDeleteConfirmationVisible = false
-                        }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
-
-                        Button("删除") {
-                            onDelete()
-                        }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.red)
-                    } else {
-                        Button {
-                            isDeleteConfirmationVisible = true
-                        } label: {
-                            Image(systemName: "trash")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(.red.opacity(0.78))
-                        }
-                        .buttonStyle(IconHoverButtonStyle())
+                    Button {
+                        showDeleteConfirmation = true
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.red.opacity(0.78))
                     }
+                    .buttonStyle(IconHoverButtonStyle())
                 }
             }
 
@@ -200,150 +184,157 @@ struct EditorPageView: View {
                     .onTapGesture { NSApp.keyWindow?.makeFirstResponder(nil) }
             )
         }
-        .overlay {
-            if showShareSheet {
-                Color.black.opacity(0.25)
+        .task(id: topic?.id) {
+            loadDraftIfNeeded()
+        }
+        .onDisappear {
+            flushDraftPersistence(existingTopicID: topic?.id)
+        }
+        .overlay { modalOverlay }
+        .overlay { toastOverlay }
+    }
+
+    // MARK: - Single always-present modal overlay
+
+    private var hasActiveModal: Bool {
+        showShareSheet || showDeleteConfirmation || showImagePreview
+    }
+
+    @ViewBuilder
+    private var modalOverlay: some View {
+        ZStack {
+            Button { dismissAllModals() } label: {
+                Color.black.opacity(hasActiveModal ? 0.08 : 0)
                     .ignoresSafeArea()
-                    .onTapGesture {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                            showShareSheet = false
-                        }
-                    }
+            }
+            .buttonStyle(.plain)
 
-                VStack {
-                    Spacer()
+            shareSheetPanel
+                .opacity(showShareSheet ? 1 : 0)
 
-                    VStack(spacing: 0) {
-                        Button {
-                            shareText()
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                                showShareSheet = false
-                            }
-                        } label: {
-                            HStack(spacing: 10) {
-                                Image(systemName: "doc.text")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(.primary)
-                                    .frame(width: 20)
-
-                                Text("分享文字")
-                                    .font(.system(size: 13, weight: .medium))
-                                    .foregroundStyle(.primary)
-
-                                Spacer()
-
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundStyle(.tertiary)
-                            }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 12)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-
-                        Divider()
-                            .padding(.horizontal, 14)
-
-                        Button {
-                            generateAndShareImage()
-                        } label: {
-                            HStack(spacing: 10) {
-                                Image(systemName: "photo")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(.primary)
-                                    .frame(width: 20)
-
-                                if isGeneratingImage {
-                                    ProgressView()
-                                        .controlSize(.small)
-                                    Text("生成中...")
-                                        .font(.system(size: 13, weight: .medium))
-                                        .foregroundStyle(.secondary)
-                                } else {
-                                    Text("分享图片")
-                                        .font(.system(size: 13, weight: .medium))
-                                        .foregroundStyle(.primary)
-                                }
-
-                                Spacer()
-
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundStyle(.tertiary)
-                            }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 12)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(isGeneratingImage)
-                    }
-                    .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(Color(nsColor: .controlBackgroundColor))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(Color.primary.opacity(0.06), lineWidth: 1)
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 12)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            ConfirmActionPage(
+                icon: "trash",
+                iconTint: .red,
+                title: deleteConfirmTitle,
+                message: "删除后无法恢复，确认删除？",
+                confirmLabel: "确认删除",
+                onCancel: { showDeleteConfirmation = false },
+                onConfirm: {
+                    showDeleteConfirmation = false
+                    onDelete()
                 }
-            }
+            )
+            .background(.ultraThinMaterial)
+            .opacity(showDeleteConfirmation ? 1 : 0)
+
+            imagePreviewPanel
+                .opacity(showImagePreview ? 1 : 0)
         }
-        .overlay {
-            if showShareSuccess {
-                Text(shareSuccessMessage)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(Color.black.opacity(0.78))
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 4)
-                    .transition(.opacity)
-            }
-        }
-        .overlay {
-            if showImagePreview, let nsImage = previewImage {
-                Color.black.opacity(0.4)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        closeImagePreview()
+        .allowsHitTesting(hasActiveModal)
+        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: hasActiveModal)
+    }
+
+    private func dismissAllModals() {
+        showShareSheet = false
+        showDeleteConfirmation = false
+        showImagePreview = false
+    }
+
+    @ViewBuilder
+    private var shareSheetPanel: some View {
+        VStack {
+            Spacer()
+
+            VStack(spacing: 0) {
+                Button {
+                    shareText()
+                    showShareSheet = false
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "doc.text")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.primary)
+                            .frame(width: 20)
+
+                        Text("分享文字")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.primary)
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.tertiary)
                     }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
 
-                GeometryReader { geo in
-                    let available = geo.size
-                    let imgAspect = nsImage.size.width / nsImage.size.height
-                    let displayWidth = min(available.width - 32, nsImage.size.width)
-                    let displayHeight = displayWidth / imgAspect
-                    let needsScroll = displayHeight > available.height - 32
+                Divider()
+                    .padding(.horizontal, 14)
 
-                    if needsScroll {
-                        ScrollView {
-                            VStack(spacing: 12) {
-                                Image(nsImage: nsImage)
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                                    .frame(width: displayWidth)
-                                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                Button {
+                    generateAndShareImage()
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "photo")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.primary)
+                            .frame(width: 20)
 
-                                Button("关闭预览") { closeImagePreview() }
-                                    .buttonStyle(.plain)
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 8)
-                                    .background(Color.black.opacity(0.6))
-                                    .clipShape(Capsule())
-                            }
-                            .padding(.vertical, 16)
-                            .frame(maxWidth: .infinity)
+                        if isGeneratingImage {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("生成中...")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("分享图片")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(.primary)
                         }
-                    } else {
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(isGeneratingImage)
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .padding(.horizontal, 12)
+            .padding(.bottom, 12)
+        }
+    }
+
+    @ViewBuilder
+    private var imagePreviewPanel: some View {
+        if let nsImage = previewImage {
+            GeometryReader { geo in
+                let available = geo.size
+                let imgAspect = nsImage.size.width / nsImage.size.height
+                let displayWidth = min(available.width - 32, nsImage.size.width)
+                let displayHeight = displayWidth / imgAspect
+                let needsScroll = displayHeight > available.height - 32
+
+                if needsScroll {
+                    ScrollView {
                         VStack(spacing: 12) {
                             Image(nsImage: nsImage)
                                 .resizable()
@@ -360,18 +351,50 @@ struct EditorPageView: View {
                                 .background(Color.black.opacity(0.6))
                                 .clipShape(Capsule())
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding(.vertical, 16)
+                        .frame(maxWidth: .infinity)
                     }
+                } else {
+                    VStack(spacing: 12) {
+                        Image(nsImage: nsImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: displayWidth)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                        Button("关闭预览") { closeImagePreview() }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(Color.black.opacity(0.6))
+                            .clipShape(Capsule())
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .transition(.opacity)
             }
         }
-        .task(id: topic?.id) {
-            loadDraftIfNeeded()
+    }
+
+    @ViewBuilder
+    private var toastOverlay: some View {
+        if showShareSuccess {
+            Text(shareSuccessMessage)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(Color.black.opacity(0.78))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 4)
+                .transition(.opacity)
         }
-        .onDisappear {
-            flushDraftPersistence(existingTopicID: topic?.id)
-        }
+    }
+
+    private var deleteConfirmTitle: String {
+        let trimmed = draftTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "未命名记录" : trimmed
     }
 
     private var documentEditorContent: some View {
@@ -527,10 +550,8 @@ struct EditorPageView: View {
 
     @MainActor
     private func closeImagePreview() {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-            showImagePreview = false
-            previewImage = nil
-        }
+        showImagePreview = false
+        previewImage = nil
         showShareSuccessToast(message: "图片复制成功")
     }
 
@@ -558,7 +579,7 @@ struct EditorPageView: View {
         loadedTopicID = currentID
         draftTitle = topic?.title ?? ""
         draftNote = note?.content ?? ""
-        isDeleteConfirmationVisible = false
+        showDeleteConfirmation = false
     }
 
     @MainActor
