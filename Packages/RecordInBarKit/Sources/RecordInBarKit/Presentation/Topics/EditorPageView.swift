@@ -17,9 +17,8 @@ struct EditorPageView: View {
     let onBack: () -> Void
     let onDelete: () -> Void
 
-    @State private var isReadMode = false
     @State private var isDeleteConfirmationVisible = false
-    @State private var titleHeight: CGFloat = 22
+    @State private var titleHeight: CGFloat = 42
     @State private var noteHeight: CGFloat = 260
     @State private var draftTitle = ""
     @State private var draftNote = ""
@@ -58,32 +57,18 @@ struct EditorPageView: View {
                     .buttonStyle(IconHoverButtonStyle())
                 }
             } middle: {
-                if let topic = topic, !isReadMode {
+                if let topic = topic {
                     updateTimeHeader(for: topic)
                         .padding(.leading, 8)
                 }
             } trailing: {
                 HStack(spacing: 6) {
-                    if isReadMode {
-                        Button {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                                showShareSheet = true
-                            }
-                        } label: {
-                            Image(systemName: "square.and.arrow.up")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(IconHoverButtonStyle())
-                    }
-
                     Button {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                            isReadMode.toggle()
-                            headerReferenceDate = .now
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                            showShareSheet = true
                         }
                     } label: {
-                        Image(systemName: isReadMode ? "square.and.pencil" : "book")
+                        Image(systemName: "square.and.arrow.up")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(.secondary)
                     }
@@ -118,20 +103,8 @@ struct EditorPageView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    // Main Content Container (Title + Note)
-                    VStack(alignment: .leading, spacing: 12) {
-                        if isReadMode {
-                            readModeContent
-                                .transition(.opacity)
-                        } else {
-                            editModeContent
-                                .transition(.opacity)
-                        }
-                    }
-                    .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isReadMode)
-                    .layoutPriority(1)
+                    documentEditorContent
 
-                    // AI Summary Section
                     if let topic {
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {
@@ -171,7 +144,7 @@ struct EditorPageView: View {
                             }
 
                             if let latestSummary = latestSummary(for: topic) {
-                                PanelCard(tone: .summary) {
+                                VStack(alignment: .leading, spacing: 10) {
                                     VStack(alignment: .leading, spacing: 8) {
                                         Text("AI 总结")
                                             .font(.system(size: 11, weight: .semibold))
@@ -207,6 +180,15 @@ struct EditorPageView: View {
                                     }
                                     .frame(maxWidth: .infinity, minHeight: 92, alignment: .topLeading)
                                 }
+                                .padding(.horizontal, 18)
+                                .padding(.vertical, 16)
+                                .background(Color.white)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                        .stroke(PanelCardTone.summary.border.opacity(0.7), lineWidth: 1)
+                                )
+                                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                                .shadow(color: .black.opacity(0.04), radius: 12, x: 0, y: 6)
                             }
                         }
                     }
@@ -394,93 +376,44 @@ struct EditorPageView: View {
         }
     }
 
-    private var editModeContent: some View {
-        PanelCard(tone: .editor) {
-            VStack(alignment: .leading, spacing: 10) {
-                RichTextFieldSection(
-                    title: "标题",
-                    text: titleBinding(for: topic),
-                    height: $titleHeight,
-                    minHeight: 22,
-                    maxHeight: 96,
-                    font: .systemFont(ofSize: 13, weight: .semibold),
-                    isEditable: true,
-                    verticalPadding: 4
-                )
-
-                ZStack(alignment: .topTrailing) {
-                    RichTextFieldSection(
-                        title: "笔记",
-                        text: noteBinding(for: topic),
-                        height: $noteHeight,
-                        minHeight: 260,
-                        maxHeight: 340,
-                        fixedHeight: 340,
-                        tracksDynamicHeight: false,
-                        font: .systemFont(ofSize: 13),
-                        isEditable: true,
-                        onCopy: { copySummary(draftNote) }
-                    )
-
-                    if showCopiedToast {
-                        CopyToastView(text: "已复制")
-                            .padding(.top, -4)
-                            .padding(.trailing, 28)
-                            .transition(.move(edge: .top).combined(with: .opacity))
-                    }
-                }
-            }
-        }
-    }
-
-    private var readModeContent: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(draftTitle.isEmpty ? "无标题" : draftTitle)
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(.primary)
-                
-                Spacer()
-                
-                if let topic = topic {
-                    Text("更新于 \(RelativeTimeFormatter.string(for: topic.updatedAt, reference: .now))")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.tertiary)
-                }
-            }
-            .padding(.horizontal, 4)
+    private var documentEditorContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            RichTextFieldSection(
+                text: titleBinding(for: topic),
+                height: $titleHeight,
+                minHeight: 42,
+                maxHeight: nil,
+                font: .systemFont(ofSize: 22, weight: .bold),
+                isEditable: true,
+                placeholder: "写下标题",
+                verticalPadding: 2
+            )
+            .padding(.bottom, 10)
 
             Divider()
-                .opacity(0.6)
+                .overlay(Color.black.opacity(0.06))
 
-            VStack(alignment: .leading, spacing: 8) {
-                if draftNote.isEmpty {
-                    Text("暂无笔记内容")
-                        .font(.system(size: 13))
-                        .italic()
-                        .foregroundStyle(.tertiary)
-                } else {
-                    Text(draftNote)
-                        .font(.system(size: 13))
-                        .lineSpacing(6)
-                        .foregroundStyle(.primary)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-            .padding(16)
-            .frame(minHeight: 280, alignment: .topLeading)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(nsColor: .textBackgroundColor).opacity(0.4))
+            RichTextFieldSection(
+                text: noteBinding(for: topic),
+                height: $noteHeight,
+                minHeight: 300,
+                maxHeight: nil,
+                font: .systemFont(ofSize: 13),
+                isEditable: true,
+                placeholder: "记录你此刻的想法、线索或问题",
+                verticalPadding: 8
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color.primary.opacity(0.03), lineWidth: 1)
-            )
+            .padding(.top, 10)
         }
-        .padding(.horizontal, 4)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 18)
+        .background(Color.white)
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.black.opacity(0.05), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .shadow(color: .black.opacity(0.04), radius: 12, x: 0, y: 6)
     }
 
     private func titleBinding(for topic: Topic?) -> Binding<String> {
@@ -625,11 +558,6 @@ struct EditorPageView: View {
         draftTitle = topic?.title ?? ""
         draftNote = note?.content ?? ""
         isDeleteConfirmationVisible = false
-
-        // Existing topic with content → read mode; new topic → edit mode
-        let hasContent = !(topic?.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || !(note?.content ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        isReadMode = topic != nil && hasContent
     }
 
     @MainActor
@@ -735,61 +663,44 @@ private struct CopyToastView: View {
 }
 
 private struct RichTextFieldSection: View {
-    let title: String
     @Binding var text: String
     @Binding var height: CGFloat
     let minHeight: CGFloat
     let maxHeight: CGFloat?
-    let fixedHeight: CGFloat?
-    let tracksDynamicHeight: Bool
     let font: NSFont
     let isEditable: Bool
-    var onCopy: (() -> Void)?
+    let placeholder: String
     var verticalPadding: CGFloat
 
     init(
-        title: String,
         text: Binding<String>,
         height: Binding<CGFloat>,
         minHeight: CGFloat,
         maxHeight: CGFloat? = nil,
-        fixedHeight: CGFloat? = nil,
-        tracksDynamicHeight: Bool = true,
         font: NSFont,
         isEditable: Bool,
-        onCopy: (() -> Void)? = nil,
+        placeholder: String,
         verticalPadding: CGFloat = 6
     ) {
-        self.title = title
         self._text = text
         self._height = height
         self.minHeight = minHeight
         self.maxHeight = maxHeight
-        self.fixedHeight = fixedHeight
-        self.tracksDynamicHeight = tracksDynamicHeight
         self.font = font
         self.isEditable = isEditable
-        self.onCopy = onCopy
+        self.placeholder = placeholder
         self.verticalPadding = verticalPadding
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(title)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
-
-                Spacer()
-
-                if let onCopy {
-                    Button(action: onCopy) {
-                        Image(systemName: "doc.on.doc")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(.secondary.opacity(0.8))
-                    }
-                    .buttonStyle(IconHoverButtonStyle())
-                }
+        ZStack(alignment: .topLeading) {
+            if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(placeholder)
+                    .font(.init(font))
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, verticalPadding + 6)
+                    .allowsHitTesting(false)
             }
 
             RichTextEditor(
@@ -797,20 +708,11 @@ private struct RichTextFieldSection: View {
                 dynamicHeight: $height,
                 minHeight: minHeight,
                 maxHeight: maxHeight,
-                tracksDynamicHeight: tracksDynamicHeight,
                 font: font,
                 isEditable: isEditable,
                 verticalPadding: verticalPadding
             )
-            .frame(height: fixedHeight ?? max(minHeight, height))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .background(Color(nsColor: .textBackgroundColor))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Color.black.opacity(0.05), lineWidth: 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .frame(height: max(minHeight, height))
         }
     }
 }
