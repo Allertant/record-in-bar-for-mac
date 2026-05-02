@@ -415,6 +415,8 @@ struct EditorPageView: View {
                         height: $noteHeight,
                         minHeight: 260,
                         maxHeight: 340,
+                        fixedHeight: 340,
+                        tracksDynamicHeight: false,
                         font: .systemFont(ofSize: 13),
                         isEditable: true,
                         onCopy: { copySummary(draftNote) }
@@ -738,6 +740,8 @@ private struct RichTextFieldSection: View {
     @Binding var height: CGFloat
     let minHeight: CGFloat
     let maxHeight: CGFloat?
+    let fixedHeight: CGFloat?
+    let tracksDynamicHeight: Bool
     let font: NSFont
     let isEditable: Bool
     var onCopy: (() -> Void)?
@@ -749,6 +753,8 @@ private struct RichTextFieldSection: View {
         height: Binding<CGFloat>,
         minHeight: CGFloat,
         maxHeight: CGFloat? = nil,
+        fixedHeight: CGFloat? = nil,
+        tracksDynamicHeight: Bool = true,
         font: NSFont,
         isEditable: Bool,
         onCopy: (() -> Void)? = nil,
@@ -759,6 +765,8 @@ private struct RichTextFieldSection: View {
         self._height = height
         self.minHeight = minHeight
         self.maxHeight = maxHeight
+        self.fixedHeight = fixedHeight
+        self.tracksDynamicHeight = tracksDynamicHeight
         self.font = font
         self.isEditable = isEditable
         self.onCopy = onCopy
@@ -789,11 +797,12 @@ private struct RichTextFieldSection: View {
                 dynamicHeight: $height,
                 minHeight: minHeight,
                 maxHeight: maxHeight,
+                tracksDynamicHeight: tracksDynamicHeight,
                 font: font,
                 isEditable: isEditable,
                 verticalPadding: verticalPadding
             )
-            .frame(height: max(minHeight, height))
+            .frame(height: fixedHeight ?? max(minHeight, height))
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
             .background(Color(nsColor: .textBackgroundColor))

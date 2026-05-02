@@ -6,6 +6,7 @@ struct RichTextEditor: NSViewRepresentable {
     @Binding var dynamicHeight: CGFloat
     let minHeight: CGFloat
     let maxHeight: CGFloat?
+    let tracksDynamicHeight: Bool
     let font: NSFont
     let isEditable: Bool
     let verticalPadding: CGFloat
@@ -15,6 +16,7 @@ struct RichTextEditor: NSViewRepresentable {
         dynamicHeight: Binding<CGFloat>,
         minHeight: CGFloat,
         maxHeight: CGFloat? = nil,
+        tracksDynamicHeight: Bool = true,
         font: NSFont = .systemFont(ofSize: 13),
         isEditable: Bool = true,
         verticalPadding: CGFloat = 6
@@ -23,6 +25,7 @@ struct RichTextEditor: NSViewRepresentable {
         self._dynamicHeight = dynamicHeight
         self.minHeight = minHeight
         self.maxHeight = maxHeight
+        self.tracksDynamicHeight = tracksDynamicHeight
         self.font = font
         self.isEditable = isEditable
         self.verticalPadding = verticalPadding
@@ -34,6 +37,7 @@ struct RichTextEditor: NSViewRepresentable {
             dynamicHeight: $dynamicHeight,
             minHeight: minHeight,
             maxHeight: maxHeight,
+            tracksDynamicHeight: tracksDynamicHeight,
             font: font,
             verticalPadding: verticalPadding
         )
@@ -82,7 +86,7 @@ struct RichTextEditor: NSViewRepresentable {
         guard let textView = scrollView.documentView as? InterceptingTextView else { return }
         textView.isEditable = isEditable
         context.coordinator.configure(textView: textView)
-        if textView.string != text {
+        if textView.string != text, !context.coordinator.isEditing {
             context.coordinator.applyExternalText(text, to: textView, preserveSelection: true)
         }
 
@@ -100,16 +104,19 @@ struct RichTextEditor: NSViewRepresentable {
         @Binding private var dynamicHeight: CGFloat
         private let minHeight: CGFloat
         private let maxHeight: CGFloat?
+        private let tracksDynamicHeight: Bool
         private let font: NSFont
         private let verticalPadding: CGFloat
         private var isApplyingProgrammaticChange = false
         private(set) var lastMeasuredWidth: CGFloat = 0
+        private(set) var isEditing = false
 
         init(
             text: Binding<String>,
             dynamicHeight: Binding<CGFloat>,
             minHeight: CGFloat,
             maxHeight: CGFloat?,
+            tracksDynamicHeight: Bool,
             font: NSFont,
             verticalPadding: CGFloat
         ) {
@@ -117,8 +124,13 @@ struct RichTextEditor: NSViewRepresentable {
             self._dynamicHeight = dynamicHeight
             self.minHeight = minHeight
             self.maxHeight = maxHeight
+            self.tracksDynamicHeight = tracksDynamicHeight
             self.font = font
             self.verticalPadding = verticalPadding
+        }
+
+        func textDidBeginEditing(_ notification: Notification) {
+            isEditing = true
         }
 
         func textDidChange(_ notification: Notification) {
@@ -126,6 +138,10 @@ struct RichTextEditor: NSViewRepresentable {
             guard !isApplyingProgrammaticChange else { return }
             text = textView.string
             recalculateLayout(for: textView)
+        }
+
+        func textDidEndEditing(_ notification: Notification) {
+            isEditing = false
         }
 
         func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
@@ -195,7 +211,7 @@ struct RichTextEditor: NSViewRepresentable {
                 }
             }
 
-            if abs(dynamicHeight - nextHeight) > 0.5 {
+            if tracksDynamicHeight, abs(dynamicHeight - nextHeight) > 0.5 {
                 dynamicHeight = nextHeight
             }
         }
