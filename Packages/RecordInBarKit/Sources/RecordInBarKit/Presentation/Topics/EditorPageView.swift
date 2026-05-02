@@ -387,12 +387,13 @@ struct EditorPageView: View {
                 .overlay(Color.black.opacity(0.06))
 
             ZStack(alignment: .topLeading) {
-                STTextNoteEditor(
+                RichTextEditor(
                     text: noteBinding(for: topic),
+                    minHeight: 100,
                     font: .systemFont(ofSize: 13),
-                    isEditable: true
+                    isEditable: true,
+                    verticalPadding: 8
                 )
-                .frame(height: 260)
 
                 if draftNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text("记录你此刻的想法、线索或问题")

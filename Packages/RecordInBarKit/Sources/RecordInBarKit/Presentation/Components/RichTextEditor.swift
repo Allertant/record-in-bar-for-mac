@@ -99,6 +99,7 @@ struct RichTextEditor: NSViewRepresentable {
             guard let textView = notification.object as? InterceptingTextView else { return }
             guard !isApplyingProgrammaticChange else { return }
             text = textView.string
+            textView.invalidateIntrinsicContentSize()
             scrollSelectionIntoView(for: textView)
         }
 
