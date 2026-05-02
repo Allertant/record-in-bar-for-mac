@@ -32,12 +32,16 @@ struct EditorPageView: View {
     @State private var previewImage: NSImage?
     @State private var showImagePreview = false
     @State private var headerReferenceDate = Date()
+    @State private var pendingPersistTask: Task<Void, Never>?
 
     var body: some View {
         VStack(spacing: 0) {
             PanelPageHeader(title: "编辑记录") {
                 HStack(spacing: 6) {
-                    Button(action: onBack) {
+                    Button {
+                        flushDraftPersistence(existingTopicID: topic?.id)
+                        onBack()
+                    } label: {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
@@ -385,6 +389,9 @@ struct EditorPageView: View {
         .task(id: topic?.id) {
             loadDraftIfNeeded()
         }
+        .onDisappear {
+            flushDraftPersistence(existingTopicID: topic?.id)
+        }
     }
 
     private var editModeContent: some View {
@@ -395,6 +402,7 @@ struct EditorPageView: View {
                     text: titleBinding(for: topic),
                     height: $titleHeight,
                     minHeight: 22,
+                    maxHeight: 96,
                     font: .systemFont(ofSize: 13, weight: .semibold),
                     isEditable: true,
                     verticalPadding: 4
@@ -406,6 +414,7 @@ struct EditorPageView: View {
                         text: noteBinding(for: topic),
                         height: $noteHeight,
                         minHeight: 260,
+                        maxHeight: 340,
                         font: .systemFont(ofSize: 13),
                         isEditable: true,
                         onCopy: { copySummary(draftNote) }
@@ -477,7 +486,7 @@ struct EditorPageView: View {
             get: { draftTitle },
             set: { newValue in
                 draftTitle = newValue
-                persistDraft(existingTopic: topic)
+                scheduleDraftPersistence(existingTopicID: topic?.id)
             }
         )
     }
@@ -487,7 +496,7 @@ struct EditorPageView: View {
             get: { draftNote },
             set: { newValue in
                 draftNote = newValue
-                persistDraft(existingTopic: topic)
+                scheduleDraftPersistence(existingTopicID: topic?.id)
             }
         )
     }
@@ -605,6 +614,8 @@ struct EditorPageView: View {
 
     @MainActor
     private func loadDraftIfNeeded() {
+        pendingPersistTask?.cancel()
+        pendingPersistTask = nil
         let currentID = topic?.id
         guard loadedTopicID != currentID else { return }
 
@@ -620,16 +631,34 @@ struct EditorPageView: View {
     }
 
     @MainActor
-    private func persistDraft(existingTopic: Topic?) {
+    private func scheduleDraftPersistence(existingTopicID: UUID?) {
+        pendingPersistTask?.cancel()
+        pendingPersistTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            persistDraft(existingTopicID: existingTopicID)
+            pendingPersistTask = nil
+        }
+    }
+
+    @MainActor
+    private func flushDraftPersistence(existingTopicID: UUID?) {
+        pendingPersistTask?.cancel()
+        pendingPersistTask = nil
+        persistDraft(existingTopicID: existingTopicID)
+    }
+
+    @MainActor
+    private func persistDraft(existingTopicID: UUID?) {
         let trimmedTitle = draftTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedNote = draftNote.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        guard existingTopic != nil || loadedTopicID != nil || !trimmedTitle.isEmpty || !trimmedNote.isEmpty else {
+        guard existingTopicID != nil || loadedTopicID != nil || !trimmedTitle.isEmpty || !trimmedNote.isEmpty else {
             return
         }
 
         let targetTopic: Topic
-        if let existingTopic {
+        if let existingTopicID, let existingTopic = allTopics.first(where: { $0.id == existingTopicID }) {
             targetTopic = existingTopic
         } else if let loadedTopicID {
             guard let storedTopic = allTopics.first(where: { $0.id == loadedTopicID }) else {
@@ -708,10 +737,33 @@ private struct RichTextFieldSection: View {
     @Binding var text: String
     @Binding var height: CGFloat
     let minHeight: CGFloat
+    let maxHeight: CGFloat?
     let font: NSFont
     let isEditable: Bool
-    var onCopy: (() -> Void)? = nil
-    var verticalPadding: CGFloat = 6
+    var onCopy: (() -> Void)?
+    var verticalPadding: CGFloat
+
+    init(
+        title: String,
+        text: Binding<String>,
+        height: Binding<CGFloat>,
+        minHeight: CGFloat,
+        maxHeight: CGFloat? = nil,
+        font: NSFont,
+        isEditable: Bool,
+        onCopy: (() -> Void)? = nil,
+        verticalPadding: CGFloat = 6
+    ) {
+        self.title = title
+        self._text = text
+        self._height = height
+        self.minHeight = minHeight
+        self.maxHeight = maxHeight
+        self.font = font
+        self.isEditable = isEditable
+        self.onCopy = onCopy
+        self.verticalPadding = verticalPadding
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -736,6 +788,7 @@ private struct RichTextFieldSection: View {
                 text: $text,
                 dynamicHeight: $height,
                 minHeight: minHeight,
+                maxHeight: maxHeight,
                 font: font,
                 isEditable: isEditable,
                 verticalPadding: verticalPadding
