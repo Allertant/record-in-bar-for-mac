@@ -42,10 +42,10 @@ struct RichTextEditor: NSViewRepresentable {
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.drawsBackground = false
         textView.textContainerInset = NSSize(width: 2, height: verticalPadding)
-        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.widthTracksTextView = false
         textView.textContainer?.heightTracksTextView = false
         textView.textContainer?.lineFragmentPadding = 0
-        textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
+        textView.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.allowsUndo = true
         configure(textView, coordinator: context.coordinator)
         context.coordinator.applyExternalText(text, to: textView, preserveSelection: false)
@@ -178,7 +178,12 @@ struct RichTextEditor: NSViewRepresentable {
 }
 
 final class InterceptingTextView: NSTextView {
-    override var isFlipped: Bool {
-        true
+    override var isFlipped: Bool { true }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        guard let tc = textContainer, newSize.width > 0 else { return }
+        let contentWidth = max(0, newSize.width - textContainerInset.width * 2)
+        tc.containerSize = NSSize(width: contentWidth, height: .greatestFiniteMagnitude)
     }
 }
