@@ -9,6 +9,8 @@ struct EditorPageView: View {
     @Query private var allNotes: [NoteItem]
     @Query private var allSummaries: [AISummary]
 
+    @ObservedObject private var pinManager = PopoverPinManager.shared
+
     let topic: Topic?
     let note: NoteItem?
     let onPersistChange: (UUID?) -> Void
@@ -34,12 +36,23 @@ struct EditorPageView: View {
     var body: some View {
         VStack(spacing: 0) {
             PanelPageHeader(title: "编辑记录") {
-                Button(action: onBack) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Button(action: onBack) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(IconHoverButtonStyle())
+
+                    Button {
+                        pinManager.isPinned.toggle()
+                    } label: {
+                        Image(systemName: pinManager.isPinned ? "pin.fill" : "pin")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(pinManager.isPinned ? .orange : .secondary)
+                    }
+                    .buttonStyle(IconHoverButtonStyle())
                 }
-                .buttonStyle(IconHoverButtonStyle())
             } middle: {
                 if let topic = topic, !isReadMode {
                     updateTimeHeader(for: topic)
