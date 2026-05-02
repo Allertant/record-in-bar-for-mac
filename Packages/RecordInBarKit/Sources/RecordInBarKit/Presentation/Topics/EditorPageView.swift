@@ -18,8 +18,6 @@ struct EditorPageView: View {
     let onDelete: () -> Void
 
     @State private var isDeleteConfirmationVisible = false
-    @State private var titleHeight: CGFloat = 42
-    @State private var noteHeight: CGFloat = 260
     @State private var draftTitle = ""
     @State private var draftNote = ""
     @State private var loadedTopicID: UUID?
@@ -378,31 +376,33 @@ struct EditorPageView: View {
 
     private var documentEditorContent: some View {
         VStack(alignment: .leading, spacing: 0) {
-            RichTextFieldSection(
-                text: titleBinding(for: topic),
-                height: $titleHeight,
-                minHeight: 42,
-                maxHeight: nil,
-                font: .systemFont(ofSize: 22, weight: .bold),
-                isEditable: true,
-                placeholder: "写下标题",
-                verticalPadding: 2
-            )
-            .padding(.bottom, 10)
+            TextField("写下标题", text: titleBinding(for: topic), axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.system(size: 22, weight: .bold))
+                .lineLimit(1 ... 3)
+                .foregroundStyle(.primary)
+                .padding(.bottom, 10)
 
             Divider()
                 .overlay(Color.black.opacity(0.06))
 
-            RichTextFieldSection(
-                text: noteBinding(for: topic),
-                height: $noteHeight,
-                minHeight: 300,
-                maxHeight: nil,
-                font: .systemFont(ofSize: 13),
-                isEditable: true,
-                placeholder: "记录你此刻的想法、线索或问题",
-                verticalPadding: 8
-            )
+            ZStack(alignment: .topLeading) {
+                STTextNoteEditor(
+                    text: noteBinding(for: topic),
+                    font: .systemFont(ofSize: 13),
+                    isEditable: true
+                )
+                .frame(height: 260)
+
+                if draftNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("记录你此刻的想法、线索或问题")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.tertiary)
+                        .padding(.top, 8)
+                        .padding(.leading, 2)
+                        .allowsHitTesting(false)
+                }
+            }
             .padding(.top, 10)
         }
         .padding(.horizontal, 18)
@@ -659,61 +659,6 @@ private struct CopyToastView: View {
             .background(Color.black.opacity(0.78))
             .clipShape(Capsule())
             .shadow(color: .black.opacity(0.12), radius: 4, x: 0, y: 2)
-    }
-}
-
-private struct RichTextFieldSection: View {
-    @Binding var text: String
-    @Binding var height: CGFloat
-    let minHeight: CGFloat
-    let maxHeight: CGFloat?
-    let font: NSFont
-    let isEditable: Bool
-    let placeholder: String
-    var verticalPadding: CGFloat
-
-    init(
-        text: Binding<String>,
-        height: Binding<CGFloat>,
-        minHeight: CGFloat,
-        maxHeight: CGFloat? = nil,
-        font: NSFont,
-        isEditable: Bool,
-        placeholder: String,
-        verticalPadding: CGFloat = 6
-    ) {
-        self._text = text
-        self._height = height
-        self.minHeight = minHeight
-        self.maxHeight = maxHeight
-        self.font = font
-        self.isEditable = isEditable
-        self.placeholder = placeholder
-        self.verticalPadding = verticalPadding
-    }
-
-    var body: some View {
-        ZStack(alignment: .topLeading) {
-            if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text(placeholder)
-                    .font(.init(font))
-                    .foregroundStyle(.tertiary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, verticalPadding + 6)
-                    .allowsHitTesting(false)
-            }
-
-            RichTextEditor(
-                text: $text,
-                dynamicHeight: $height,
-                minHeight: minHeight,
-                maxHeight: maxHeight,
-                font: font,
-                isEditable: isEditable,
-                verticalPadding: verticalPadding
-            )
-            .frame(height: max(minHeight, height))
-        }
     }
 }
 

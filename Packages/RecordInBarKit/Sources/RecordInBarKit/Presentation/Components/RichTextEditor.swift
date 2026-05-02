@@ -3,55 +3,31 @@ import SwiftUI
 
 struct RichTextEditor: NSViewRepresentable {
     @Binding var text: String
-    @Binding var dynamicHeight: CGFloat
     let minHeight: CGFloat
-    let maxHeight: CGFloat?
-    let tracksDynamicHeight: Bool
     let font: NSFont
     let isEditable: Bool
     let verticalPadding: CGFloat
 
     init(
         text: Binding<String>,
-        dynamicHeight: Binding<CGFloat>,
         minHeight: CGFloat,
-        maxHeight: CGFloat? = nil,
-        tracksDynamicHeight: Bool = true,
         font: NSFont = .systemFont(ofSize: 13),
         isEditable: Bool = true,
         verticalPadding: CGFloat = 6
     ) {
         self._text = text
-        self._dynamicHeight = dynamicHeight
         self.minHeight = minHeight
-        self.maxHeight = maxHeight
-        self.tracksDynamicHeight = tracksDynamicHeight
         self.font = font
         self.isEditable = isEditable
         self.verticalPadding = verticalPadding
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(
-            text: $text,
-            dynamicHeight: $dynamicHeight,
-            minHeight: minHeight,
-            maxHeight: maxHeight,
-            tracksDynamicHeight: tracksDynamicHeight,
-            font: font,
-            verticalPadding: verticalPadding
-        )
+        Coordinator(text: $text, font: font, verticalPadding: verticalPadding)
     }
 
-    func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSScrollView()
-        scrollView.drawsBackground = false
-        scrollView.borderType = .noBorder
-        scrollView.hasVerticalScroller = maxHeight != nil
-        scrollView.hasHorizontalScroller = false
-        scrollView.autohidesScrollers = true
-
-        let textView = InterceptingTextView()
+    func makeNSView(context: Context) -> InterceptingTextView {
+        let textView = InterceptingTextView(frame: .zero)
         textView.delegate = context.coordinator
         textView.isRichText = false
         textView.importsGraphics = false
@@ -62,69 +38,55 @@ struct RichTextEditor: NSViewRepresentable {
         textView.isAutomaticTextCompletionEnabled = false
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
+        textView.minSize = .zero
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.drawsBackground = false
         textView.textContainerInset = NSSize(width: 2, height: verticalPadding)
         textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.heightTracksTextView = false
         textView.textContainer?.lineFragmentPadding = 0
-        textView.font = font
-        textView.isEditable = isEditable
-        textView.isSelectable = true
+        textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
         textView.allowsUndo = true
-        context.coordinator.configure(textView: textView)
+        configure(textView, coordinator: context.coordinator)
         context.coordinator.applyExternalText(text, to: textView, preserveSelection: false)
-
-        scrollView.documentView = textView
-
-        DispatchQueue.main.async {
-            context.coordinator.recalculateLayout(for: textView)
-        }
-
-        return scrollView
+        return textView
     }
 
-    func updateNSView(_ scrollView: NSScrollView, context: Context) {
-        guard let textView = scrollView.documentView as? InterceptingTextView else { return }
-        textView.isEditable = isEditable
-        context.coordinator.configure(textView: textView)
+    func updateNSView(_ textView: InterceptingTextView, context: Context) {
+        configure(textView, coordinator: context.coordinator)
         if textView.string != text, !context.coordinator.isEditing {
             context.coordinator.applyExternalText(text, to: textView, preserveSelection: true)
         }
+    }
 
-        let measuredWidth = textView.bounds.width
-        if abs(context.coordinator.lastMeasuredWidth - measuredWidth) > 0.5 {
-            DispatchQueue.main.async {
-                context.coordinator.recalculateLayout(for: textView)
-            }
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView textView: InterceptingTextView, context: Context) -> CGSize? {
+        let width = proposal.width ?? (textView.bounds.width > 0 ? textView.bounds.width : context.coordinator.lastMeasuredWidth)
+        guard width > 0 else {
+            return CGSize(width: context.coordinator.lastMeasuredWidth, height: minHeight)
         }
+
+        let measuredHeight = context.coordinator.measuredHeight(for: textView, width: width, minHeight: minHeight)
+        return CGSize(width: width, height: measuredHeight)
+    }
+
+    private func configure(_ textView: InterceptingTextView, coordinator: Coordinator) {
+        textView.isEditable = isEditable
+        textView.font = font
+        textView.textContainerInset = NSSize(width: 2, height: verticalPadding)
+        coordinator.applyTypingAttributes(to: textView)
     }
 
     @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         @Binding private var text: String
-        @Binding private var dynamicHeight: CGFloat
-        private let minHeight: CGFloat
-        private let maxHeight: CGFloat?
-        private let tracksDynamicHeight: Bool
         private let font: NSFont
         private let verticalPadding: CGFloat
         private var isApplyingProgrammaticChange = false
-        private(set) var lastMeasuredWidth: CGFloat = 0
         private(set) var isEditing = false
+        private(set) var lastMeasuredWidth: CGFloat = 320
 
-        init(
-            text: Binding<String>,
-            dynamicHeight: Binding<CGFloat>,
-            minHeight: CGFloat,
-            maxHeight: CGFloat?,
-            tracksDynamicHeight: Bool,
-            font: NSFont,
-            verticalPadding: CGFloat
-        ) {
+        init(text: Binding<String>, font: NSFont, verticalPadding: CGFloat) {
             self._text = text
-            self._dynamicHeight = dynamicHeight
-            self.minHeight = minHeight
-            self.maxHeight = maxHeight
-            self.tracksDynamicHeight = tracksDynamicHeight
             self.font = font
             self.verticalPadding = verticalPadding
         }
@@ -137,7 +99,7 @@ struct RichTextEditor: NSViewRepresentable {
             guard let textView = notification.object as? InterceptingTextView else { return }
             guard !isApplyingProgrammaticChange else { return }
             text = textView.string
-            recalculateLayout(for: textView)
+            scrollSelectionIntoView(for: textView)
         }
 
         func textDidEndEditing(_ notification: Notification) {
@@ -152,9 +114,7 @@ struct RichTextEditor: NSViewRepresentable {
             return false
         }
 
-        func configure(textView: NSTextView) {
-            textView.font = font
-            textView.textContainerInset = NSSize(width: 2, height: verticalPadding)
+        func applyTypingAttributes(to textView: NSTextView) {
             let style = NSMutableParagraphStyle()
             style.lineSpacing = 5
             style.paragraphSpacing = 6
@@ -190,32 +150,34 @@ struct RichTextEditor: NSViewRepresentable {
             } else {
                 textView.setSelectedRange(NSRange(location: textView.string.utf16.count, length: 0))
             }
+
             isApplyingProgrammaticChange = false
-            recalculateLayout(for: textView)
+            scrollSelectionIntoView(for: textView)
         }
 
-        func recalculateLayout(for textView: NSTextView) {
-            let width = textView.bounds.width > 0 ? textView.bounds.width : 280
+        func measuredHeight(for textView: NSTextView, width: CGFloat, minHeight: CGFloat) -> CGFloat {
+            guard let layoutManager = textView.layoutManager, let textContainer = textView.textContainer else {
+                return minHeight
+            }
+
             lastMeasuredWidth = width
-            guard let layoutManager = textView.layoutManager, let textContainer = textView.textContainer else { return }
-            textContainer.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
+            let contentWidth = max(0, width - 4)
+            textContainer.containerSize = NSSize(width: contentWidth, height: CGFloat.greatestFiniteMagnitude)
             layoutManager.ensureLayout(for: textContainer)
             let usedRect = layoutManager.usedRect(for: textContainer)
-            let naturalHeight = max(minHeight, ceil(usedRect.height + verticalPadding * 2))
-            let nextHeight = min(maxHeight ?? naturalHeight, naturalHeight)
+            return max(minHeight, ceil(usedRect.height + verticalPadding * 2))
+        }
 
-            if let scrollView = textView.enclosingScrollView {
-                let needsVerticalScroller = maxHeight != nil && naturalHeight > nextHeight + 0.5
-                if scrollView.hasVerticalScroller != needsVerticalScroller {
-                    scrollView.hasVerticalScroller = needsVerticalScroller
-                }
-            }
-
-            if tracksDynamicHeight, abs(dynamicHeight - nextHeight) > 0.5 {
-                dynamicHeight = nextHeight
-            }
+        private func scrollSelectionIntoView(for textView: NSTextView) {
+            let selection = textView.selectedRange()
+            guard selection.location != NSNotFound else { return }
+            textView.scrollRangeToVisible(selection)
         }
     }
 }
 
-private final class InterceptingTextView: NSTextView {}
+final class InterceptingTextView: NSTextView {
+    override var isFlipped: Bool {
+        true
+    }
+}
