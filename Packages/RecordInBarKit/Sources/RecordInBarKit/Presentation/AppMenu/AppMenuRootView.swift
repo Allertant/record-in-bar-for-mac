@@ -280,6 +280,7 @@ public struct AppMenuRootView: View {
             .sorted(using: KeyPathComparator(\.updatedAt, order: .reverse))
             .first?
             .content
+            .replacingImageMarkers()
             .searchPreview(for: searchText)
             .nilIfEmpty ?? "暂无笔记"
     }
@@ -347,6 +348,14 @@ private struct HistoryCardView: View {
 }
 
 private extension String {
+    func replacingImageMarkers() -> String {
+        replacingOccurrences(
+            of: #"\[IMG:[0-9A-Fa-f\-]+\]"#,
+            with: "[图片]",
+            options: .regularExpression
+        )
+    }
+
     var nilIfEmpty: String? {
         trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : self
     }
