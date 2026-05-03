@@ -13,6 +13,7 @@ enum SettingsBootstrap {
                 existing.updatedAt = .now
                 try? context.save()
             }
+            ImageStorage.configuredPath = existing.imageStoragePath ?? ""
             return
         }
 

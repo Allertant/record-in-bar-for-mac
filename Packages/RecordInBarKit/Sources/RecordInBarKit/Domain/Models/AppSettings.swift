@@ -10,6 +10,7 @@ public final class AppSettings {
     public var selectedModel: String
     public var thinkingEnabled: Bool
     public var reasoningEffort: String
+    public var imageStoragePath: String?
     public var updatedAt: Date
 
     public init(
@@ -18,6 +19,7 @@ public final class AppSettings {
         selectedModel: String = "deepseek-v4-flash",
         thinkingEnabled: Bool = false,
         reasoningEffort: String = "high",
+        imageStoragePath: String? = nil,
         updatedAt: Date = .now
     ) {
         self.profile = profile
@@ -25,6 +27,7 @@ public final class AppSettings {
         self.selectedModel = selectedModel
         self.thinkingEnabled = thinkingEnabled
         self.reasoningEffort = reasoningEffort
+        self.imageStoragePath = imageStoragePath
         self.updatedAt = updatedAt
     }
 
