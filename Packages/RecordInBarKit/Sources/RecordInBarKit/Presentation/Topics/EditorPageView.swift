@@ -419,6 +419,13 @@ struct EditorPageView: View {
                     verticalPadding: 8,
                     onImagePasted: { image in
                         savePastedImage(image)
+                    },
+                    imageLoader: { uuid in
+                        guard let ni = noteImages.first(where: { $0.id == uuid }) else { return nil }
+                        return ImageStorage.loadImage(relativePath: ni.relativePath)
+                    },
+                    onImageDeleted: { uuid in
+                        deleteInlineImage(uuid)
                     }
                 )
 
@@ -432,10 +439,6 @@ struct EditorPageView: View {
                 }
             }
             .padding(.top, 10)
-
-            if !imagesForCurrentTopic.isEmpty {
-                imageAttachmentSection
-            }
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 18)
@@ -730,32 +733,9 @@ private struct ShareableNoteCard: View {
 // MARK: - Image attachment helpers
 
 extension EditorPageView {
-    private var imagesForCurrentTopic: [NoteImage] {
-        guard let tid = topic?.id ?? loadedTopicID else { return [] }
-        return noteImages.filter { $0.topicID == tid }
-    }
-
-    private var imageAttachmentSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            ForEach(imagesForCurrentTopic) { noteImage in
-                if let nsImage = ImageStorage.loadImage(relativePath: noteImage.relativePath) {
-                    Image(nsImage: nsImage)
-                        .resizable()
-                        .scaledToFit()
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .contextMenu {
-                            Button("删除图片", role: .destructive) {
-                                deleteImage(noteImage)
-                            }
-                        }
-                }
-            }
-        }
-        .padding(.top, 10)
-    }
-
     @MainActor
-    private func savePastedImage(_ image: NSImage) {
+    @discardableResult
+    private func savePastedImage(_ image: NSImage) -> UUID? {
         let targetID: UUID
         if let existingID = topic?.id ?? loadedTopicID {
             targetID = existingID
@@ -767,7 +747,7 @@ extension EditorPageView {
             targetID = newTopic.id
         }
 
-        guard let jpegData = jpegDataForStorage(from: image) else { return }
+        guard let jpegData = jpegDataForStorage(from: image) else { return nil }
 
         let imageID = UUID()
         do {
@@ -786,9 +766,19 @@ extension EditorPageView {
             )
             modelContext.insert(noteImage)
             try modelContext.save()
+            return imageID
         } catch {
             print("保存图片失败：\(error)")
+            return nil
         }
+    }
+
+    @MainActor
+    private func deleteInlineImage(_ imageID: UUID) {
+        guard let noteImage = noteImages.first(where: { $0.id == imageID }) else { return }
+        ImageStorage.deleteImage(relativePath: noteImage.relativePath)
+        modelContext.delete(noteImage)
+        try? modelContext.save()
     }
 
     private func jpegDataForStorage(

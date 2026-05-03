@@ -7,7 +7,9 @@ struct RichTextEditor: NSViewRepresentable {
     let font: NSFont
     let isEditable: Bool
     let verticalPadding: CGFloat
-    var onImagePasted: ((NSImage) -> Void)?
+    var onImagePasted: ((NSImage) -> UUID?)?
+    var imageLoader: (UUID) -> NSImage?
+    var onImageDeleted: ((UUID) -> Void)?
 
     init(
         text: Binding<String>,
@@ -15,7 +17,9 @@ struct RichTextEditor: NSViewRepresentable {
         font: NSFont = .systemFont(ofSize: 13),
         isEditable: Bool = true,
         verticalPadding: CGFloat = 6,
-        onImagePasted: ((NSImage) -> Void)? = nil
+        onImagePasted: ((NSImage) -> UUID?)? = nil,
+        imageLoader: @escaping (UUID) -> NSImage? = { _ in nil },
+        onImageDeleted: ((UUID) -> Void)? = nil
     ) {
         self._text = text
         self.minHeight = minHeight
@@ -23,10 +27,12 @@ struct RichTextEditor: NSViewRepresentable {
         self.isEditable = isEditable
         self.verticalPadding = verticalPadding
         self.onImagePasted = onImagePasted
+        self.imageLoader = imageLoader
+        self.onImageDeleted = onImageDeleted
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text, font: font, verticalPadding: verticalPadding)
+        Coordinator(text: $text, font: font, verticalPadding: verticalPadding, imageLoader: imageLoader, onImageDeleted: onImageDeleted)
     }
 
     func makeNSView(context: Context) -> InterceptingTextView {
@@ -59,7 +65,11 @@ struct RichTextEditor: NSViewRepresentable {
     func updateNSView(_ textView: InterceptingTextView, context: Context) {
         configure(textView, coordinator: context.coordinator)
         textView.onImagePasted = onImagePasted
-        if textView.string != text, !context.coordinator.isEditing {
+        context.coordinator.imageLoader = imageLoader
+        context.coordinator.onImageDeleted = onImageDeleted
+
+        let currentMarkerText = Self.Coordinator.stringWithImageMarkers(from: textView)
+        if currentMarkerText != text, !context.coordinator.isEditing {
             context.coordinator.applyExternalText(text, to: textView, preserveSelection: true)
         }
     }
@@ -89,11 +99,16 @@ struct RichTextEditor: NSViewRepresentable {
         private var isApplyingProgrammaticChange = false
         private(set) var isEditing = false
         private(set) var lastMeasuredWidth: CGFloat = 320
+        var imageLoader: (UUID) -> NSImage?
+        var onImageDeleted: ((UUID) -> Void)?
+        private var previousAttachmentIDs: Set<UUID> = []
 
-        init(text: Binding<String>, font: NSFont, verticalPadding: CGFloat) {
+        init(text: Binding<String>, font: NSFont, verticalPadding: CGFloat, imageLoader: @escaping (UUID) -> NSImage?, onImageDeleted: ((UUID) -> Void)?) {
             self._text = text
             self.font = font
             self.verticalPadding = verticalPadding
+            self.imageLoader = imageLoader
+            self.onImageDeleted = onImageDeleted
         }
 
         func textDidBeginEditing(_ notification: Notification) {
@@ -103,7 +118,17 @@ struct RichTextEditor: NSViewRepresentable {
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? InterceptingTextView else { return }
             guard !isApplyingProgrammaticChange else { return }
-            text = textView.string
+
+            let markerText = Self.stringWithImageMarkers(from: textView)
+            text = markerText
+
+            let currentIDs = Self.attachmentIDs(in: textView)
+            let deletedIDs = previousAttachmentIDs.subtracting(currentIDs)
+            for id in deletedIDs {
+                onImageDeleted?(id)
+            }
+            previousAttachmentIDs = currentIDs
+
             textView.invalidateIntrinsicContentSize()
             scrollSelectionIntoView(for: textView)
         }
@@ -140,21 +165,24 @@ struct RichTextEditor: NSViewRepresentable {
         func applyExternalText(_ newText: String, to textView: NSTextView, preserveSelection: Bool) {
             let selectedRange = textView.selectedRange()
             isApplyingProgrammaticChange = true
-            textView.string = newText
 
-            if let textStorage = textView.textStorage, textStorage.length > 0 {
-                textStorage.beginEditing()
-                textStorage.setAttributes(textView.typingAttributes, range: NSRange(location: 0, length: textStorage.length))
-                textStorage.endEditing()
+            let attributed = Self.attributedStringFromMarkedText(newText, typingAttributes: textView.typingAttributes, imageLoader: imageLoader)
+
+            if let textStorage = textView.textStorage {
+                textStorage.setAttributedString(attributed)
+            } else {
+                textView.textStorage?.setAttributedString(attributed)
             }
 
+            previousAttachmentIDs = Self.attachmentIDs(in: textView)
+
             if preserveSelection {
-                let maxLocation = textView.string.utf16.count
+                let maxLocation = textView.textStorage?.length ?? 0
                 let clampedLocation = min(selectedRange.location, maxLocation)
                 let clampedLength = min(selectedRange.length, max(0, maxLocation - clampedLocation))
                 textView.setSelectedRange(NSRange(location: clampedLocation, length: clampedLength))
             } else {
-                textView.setSelectedRange(NSRange(location: textView.string.utf16.count, length: 0))
+                textView.setSelectedRange(NSRange(location: textView.textStorage?.length ?? 0, length: 0))
             }
 
             isApplyingProgrammaticChange = false
@@ -174,6 +202,80 @@ struct RichTextEditor: NSViewRepresentable {
             return max(minHeight, ceil(usedRect.height + verticalPadding * 2))
         }
 
+        // MARK: - Image marker helpers
+
+        static func stringWithImageMarkers(from textView: NSTextView) -> String {
+            guard let storage = textView.textStorage else { return textView.string }
+            var result = ""
+            var i = 0
+            while i < storage.length {
+                if let attachment = storage.attribute(.attachment, at: i, effectiveRange: nil) as? ImageTextAttachment {
+                    result += "[IMG:\(attachment.imageID.uuidString)]"
+                } else {
+                    result += (storage.string as NSString).substring(with: NSRange(location: i, length: 1))
+                }
+                i += 1
+            }
+            return result
+        }
+
+        static func attachmentIDs(in textView: NSTextView) -> Set<UUID> {
+            guard let storage = textView.textStorage else { return [] }
+            var ids = Set<UUID>()
+            var i = 0
+            while i < storage.length {
+                var range = NSRange(location: 0, length: 0)
+                if let attachment = storage.attribute(.attachment, at: i, effectiveRange: &range) as? ImageTextAttachment {
+                    ids.insert(attachment.imageID)
+                    i = range.upperBound
+                } else {
+                    i += 1
+                }
+            }
+            return ids
+        }
+
+        static func attributedStringFromMarkedText(
+            _ markedText: String,
+            typingAttributes: [NSAttributedString.Key: Any],
+            imageLoader: (UUID) -> NSImage?
+        ) -> NSAttributedString {
+            let pattern = #"\[IMG:([0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})\]"#
+            guard let regex = try? NSRegularExpression(pattern: pattern) else {
+                return NSAttributedString(string: markedText, attributes: typingAttributes)
+            }
+
+            let fullRange = NSRange(markedText.startIndex..., in: markedText)
+            let matches = regex.matches(in: markedText, range: fullRange)
+            let result = NSMutableAttributedString()
+            var lastEnd = markedText.startIndex
+
+            for match in matches {
+                let markerRange = Range(match.range, in: markedText)!
+                let beforeText = markedText[lastEnd..<markerRange.lowerBound]
+                if !beforeText.isEmpty {
+                    result.append(NSAttributedString(string: String(beforeText), attributes: typingAttributes))
+                }
+
+                let uuidRange = Range(match.range(at: 1), in: markedText)!
+                let uuidString = String(markedText[uuidRange])
+                if let uuid = UUID(uuidString: uuidString), let image = imageLoader(uuid) {
+                    let attachment = ImageTextAttachment(image: image, imageID: uuid)
+                    result.append(NSAttributedString(attachment: attachment))
+                } else {
+                    result.append(NSAttributedString(string: "[IMG:\(uuidString)]", attributes: typingAttributes))
+                }
+
+                lastEnd = markerRange.upperBound
+            }
+
+            if lastEnd < markedText.endIndex {
+                result.append(NSAttributedString(string: String(markedText[lastEnd..<markedText.endIndex]), attributes: typingAttributes))
+            }
+
+            return result
+        }
+
         private func scrollSelectionIntoView(for textView: NSTextView) {
             let selection = textView.selectedRange()
             guard selection.location != NSNotFound else { return }
@@ -184,7 +286,7 @@ struct RichTextEditor: NSViewRepresentable {
 
 final class InterceptingTextView: NSTextView {
     override var isFlipped: Bool { true }
-    var onImagePasted: ((NSImage) -> Void)?
+    var onImagePasted: ((NSImage) -> UUID?)?
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
@@ -196,7 +298,12 @@ final class InterceptingTextView: NSTextView {
     override func paste(_ sender: Any?) {
         let pb = NSPasteboard.general
         if let image = Self.imageFromPasteboard(pb) {
-            onImagePasted?(image)
+            guard let imageID = onImagePasted?(image) else { return }
+            let attachment = ImageTextAttachment(image: image, imageID: imageID)
+            let attrString = NSAttributedString(attachment: attachment)
+            guard let textStorage else { return }
+            textStorage.replaceCharacters(in: selectedRange(), with: attrString)
+            didChangeText()
             return
         }
         super.pasteAsPlainText(sender)
