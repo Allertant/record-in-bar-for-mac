@@ -91,6 +91,38 @@ struct RichTextEditor: NSViewRepresentable {
         coordinator.applyTypingAttributes(to: textView)
     }
 
+    // MARK: - Paragraph styles
+
+    static func normalParagraphStyle() -> NSParagraphStyle {
+        let style = NSMutableParagraphStyle()
+        style.lineSpacing = 5
+        style.paragraphSpacing = 6
+        style.tabStops = [
+            NSTextTab(textAlignment: .left, location: 22),
+            NSTextTab(textAlignment: .left, location: 44),
+            NSTextTab(textAlignment: .left, location: 66)
+        ]
+        return style
+    }
+
+    static func imageParagraphStyle() -> NSParagraphStyle {
+        let style = NSMutableParagraphStyle()
+        style.lineSpacing = 0
+        style.paragraphSpacingBefore = 10
+        style.paragraphSpacing = 18
+        return style
+    }
+
+    static func generatedNewline(paragraphStyle: NSParagraphStyle? = nil) -> NSAttributedString {
+        var attrs: [NSAttributedString.Key: Any] = [
+            .generatedImageLayoutNewline: true
+        ]
+        if let paragraphStyle {
+            attrs[.paragraphStyle] = paragraphStyle
+        }
+        return NSAttributedString(string: "\n", attributes: attrs)
+    }
+
     @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         @Binding private var text: String
@@ -146,18 +178,10 @@ struct RichTextEditor: NSViewRepresentable {
         }
 
         func applyTypingAttributes(to textView: NSTextView) {
-            let style = NSMutableParagraphStyle()
-            style.lineSpacing = 5
-            style.paragraphSpacing = 6
-            style.tabStops = [
-                NSTextTab(textAlignment: .left, location: 22),
-                NSTextTab(textAlignment: .left, location: 44),
-                NSTextTab(textAlignment: .left, location: 66)
-            ]
-            textView.defaultParagraphStyle = style
+            textView.defaultParagraphStyle = RichTextEditor.normalParagraphStyle()
             textView.typingAttributes = [
                 .font: font,
-                .paragraphStyle: style,
+                .paragraphStyle: RichTextEditor.normalParagraphStyle(),
                 .foregroundColor: NSColor.labelColor
             ]
         }
@@ -166,7 +190,7 @@ struct RichTextEditor: NSViewRepresentable {
             let selectedRange = textView.selectedRange()
             isApplyingProgrammaticChange = true
 
-            let attributed = Self.attributedStringFromMarkedText(newText, typingAttributes: textView.typingAttributes, imageLoader: imageLoader)
+            let attributed = Self.attributedStringFromMarkedText(newText, font: font, imageLoader: imageLoader)
 
             if let textStorage = textView.textStorage {
                 textStorage.setAttributedString(attributed)
@@ -207,14 +231,15 @@ struct RichTextEditor: NSViewRepresentable {
         static func stringWithImageMarkers(from textView: NSTextView) -> String {
             guard let storage = textView.textStorage else { return textView.string }
             var result = ""
-            var i = 0
-            while i < storage.length {
-                if let attachment = storage.attribute(.attachment, at: i, effectiveRange: nil) as? ImageTextAttachment {
-                    result += "[IMG:\(attachment.imageID.uuidString)]"
-                } else {
-                    result += (storage.string as NSString).substring(with: NSRange(location: i, length: 1))
+            storage.enumerateAttributes(in: NSRange(location: 0, length: storage.length), options: []) { attrs, range, _ in
+                if attrs[.generatedImageLayoutNewline] as? Bool == true {
+                    return
                 }
-                i += 1
+                if let attachment = attrs[.attachment] as? ImageTextAttachment {
+                    result += "[IMG:\(attachment.imageID.uuidString)]"
+                    return
+                }
+                result += (storage.string as NSString).substring(with: range)
             }
             return result
         }
@@ -237,12 +262,18 @@ struct RichTextEditor: NSViewRepresentable {
 
         static func attributedStringFromMarkedText(
             _ markedText: String,
-            typingAttributes: [NSAttributedString.Key: Any],
+            font: NSFont,
             imageLoader: (UUID) -> NSImage?
         ) -> NSAttributedString {
+            let normalAttrs: [NSAttributedString.Key: Any] = [
+                .font: font,
+                .foregroundColor: NSColor.labelColor,
+                .paragraphStyle: RichTextEditor.normalParagraphStyle()
+            ]
+
             let pattern = #"\[IMG:([0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})\]"#
             guard let regex = try? NSRegularExpression(pattern: pattern) else {
-                return NSAttributedString(string: markedText, attributes: typingAttributes)
+                return NSAttributedString(string: markedText, attributes: normalAttrs)
             }
 
             let fullRange = NSRange(markedText.startIndex..., in: markedText)
@@ -254,23 +285,37 @@ struct RichTextEditor: NSViewRepresentable {
                 let markerRange = Range(match.range, in: markedText)!
                 let beforeText = markedText[lastEnd..<markerRange.lowerBound]
                 if !beforeText.isEmpty {
-                    result.append(NSAttributedString(string: String(beforeText), attributes: typingAttributes))
+                    result.append(NSAttributedString(string: String(beforeText), attributes: normalAttrs))
+                }
+
+                // Insert generated \n before attachment if needed
+                if result.length > 0 && !result.string.hasSuffix("\n") {
+                    result.append(RichTextEditor.generatedNewline())
                 }
 
                 let uuidRange = Range(match.range(at: 1), in: markedText)!
                 let uuidString = String(markedText[uuidRange])
                 if let uuid = UUID(uuidString: uuidString), let image = imageLoader(uuid) {
                     let attachment = ImageTextAttachment(image: image, imageID: uuid)
-                    result.append(NSAttributedString(attachment: attachment))
+                    let imageAttrs: [NSAttributedString.Key: Any] = [
+                        .paragraphStyle: RichTextEditor.imageParagraphStyle()
+                    ]
+                    var attachmentString = NSAttributedString(attachment: attachment)
+                    let mutable = NSMutableAttributedString(attributedString: attachmentString)
+                    mutable.addAttributes(imageAttrs, range: NSRange(location: 0, length: mutable.length))
+                    result.append(mutable)
                 } else {
-                    result.append(NSAttributedString(string: "[IMG:\(uuidString)]", attributes: typingAttributes))
+                    result.append(NSAttributedString(string: "[IMG:\(uuidString)]", attributes: normalAttrs))
                 }
+
+                // Insert generated \n after attachment with image paragraph style
+                result.append(RichTextEditor.generatedNewline(paragraphStyle: RichTextEditor.imageParagraphStyle()))
 
                 lastEnd = markerRange.upperBound
             }
 
             if lastEnd < markedText.endIndex {
-                result.append(NSAttributedString(string: String(markedText[lastEnd..<markedText.endIndex]), attributes: typingAttributes))
+                result.append(NSAttributedString(string: String(markedText[lastEnd..<markedText.endIndex]), attributes: normalAttrs))
             }
 
             return result
@@ -300,9 +345,30 @@ final class InterceptingTextView: NSTextView {
         if let image = Self.imageFromPasteboard(pb) {
             guard let imageID = onImagePasted?(image) else { return }
             let attachment = ImageTextAttachment(image: image, imageID: imageID)
-            let attrString = NSAttributedString(attachment: attachment)
+            let insert = NSMutableAttributedString()
+            let range = selectedRange()
+
+            // Insert generated \n before if needed
+            if range.location > 0, let textStorage {
+                let string = textStorage.string as NSString
+                if string.character(at: range.location - 1) != 0x0A {
+                    insert.append(RichTextEditor.generatedNewline())
+                }
+            }
+
+            // Insert attachment with image paragraph style
+            let imageAttrs: [NSAttributedString.Key: Any] = [
+                .paragraphStyle: RichTextEditor.imageParagraphStyle()
+            ]
+            let mutable = NSMutableAttributedString(attributedString: NSAttributedString(attachment: attachment))
+            mutable.addAttributes(imageAttrs, range: NSRange(location: 0, length: mutable.length))
+            insert.append(mutable)
+
+            // Insert generated \n after with image paragraph style
+            insert.append(RichTextEditor.generatedNewline(paragraphStyle: RichTextEditor.imageParagraphStyle()))
+
             guard let textStorage else { return }
-            textStorage.replaceCharacters(in: selectedRange(), with: attrString)
+            textStorage.replaceCharacters(in: range, with: insert)
             didChangeText()
             return
         }

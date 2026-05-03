@@ -1,5 +1,9 @@
 import AppKit
 
+extension NSAttributedString.Key {
+    static let generatedImageLayoutNewline = NSAttributedString.Key("generatedImageLayoutNewline")
+}
+
 final class ImageTextAttachment: NSTextAttachment {
     let imageID: UUID
 
