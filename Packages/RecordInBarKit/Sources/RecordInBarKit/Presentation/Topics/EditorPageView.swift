@@ -9,6 +9,7 @@ struct EditorPageView: View {
     @Query private var allNotes: [NoteItem]
     @Query private var allSummaries: [AISummary]
     @Query(sort: \NoteImage.createdAt) private var noteImages: [NoteImage]
+    @Query private var appSettings: [AppSettings]
 
     @ObservedObject private var pinManager = PopoverPinManager.shared
 
@@ -534,7 +535,13 @@ struct EditorPageView: View {
         dateFormatter.dateFormat = "yyyy/MM/dd HH:mm"
         let timeString = dateFormatter.string(from: Date())
 
-        let card = ShareableNoteCard(title: draftTitle, note: draftNote, time: timeString)
+        let includeSummary = appSettings.first?.includeAISummaryInShareImage ?? true
+        let summaryText: String? = {
+            guard includeSummary, let topic else { return nil }
+            return latestSummary(for: topic)?.summaryText
+        }()
+
+        let card = ShareableNoteCard(title: draftTitle, note: draftNote, time: timeString, summary: summaryText)
         let renderer = ImageRenderer(content: card)
         renderer.scale = 2.0
 
@@ -703,6 +710,7 @@ private struct ShareableNoteCard: View {
     let title: String
     let note: String
     let time: String
+    let summary: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -715,6 +723,19 @@ private struct ShareableNoteCard: View {
                     .font(.system(size: 14))
                     .lineSpacing(6)
                     .foregroundStyle(.primary)
+            }
+
+            if let summary, !summary.isEmpty {
+                Divider()
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("AI 总结")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(PanelCardTone.summary.accent)
+                    Text(summary)
+                        .font(.system(size: 13))
+                        .lineSpacing(5)
+                        .foregroundStyle(.primary)
+                }
             }
 
             HStack {

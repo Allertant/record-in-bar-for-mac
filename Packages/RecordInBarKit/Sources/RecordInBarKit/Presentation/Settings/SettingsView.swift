@@ -115,6 +115,12 @@ struct SettingsPageView: View {
                 Toggle("启用思考模式", isOn: binding(for: settings, keyPath: \.thinkingEnabled))
                     .font(.system(size: 12))
 
+                Toggle("分享图片包含 AI 总结", isOn: Binding<Bool>(
+                    get: { settings.includeAISummaryInShareImage ?? true },
+                    set: { settings.includeAISummaryInShareImage = $0; settings.updatedAt = .now; try? modelContext.save() }
+                ))
+                    .font(.system(size: 12))
+
                 VStack(alignment: .leading, spacing: 6) {
                     Text("推理强度")
                         .font(.system(size: 11, weight: .semibold))
@@ -149,6 +155,7 @@ struct SettingsPageView: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .help(storagePathDisplay)
 
                     Button(isShowingFullStoragePath ? "收起" : "查看") {
                         withAnimation(.easeInOut(duration: 0.18)) {
