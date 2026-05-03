@@ -207,6 +207,7 @@ struct RichTextEditor: NSViewRepresentable {
             }
 
             previousAttachmentIDs = Self.attachmentIDs(in: textView)
+            heightInvalidated = true
 
             if preserveSelection {
                 let maxLocation = textView.textStorage?.length ?? 0
