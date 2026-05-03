@@ -131,6 +131,9 @@ struct RichTextEditor: NSViewRepresentable {
         private var isApplyingProgrammaticChange = false
         private(set) var isEditing = false
         private(set) var lastMeasuredWidth: CGFloat = 320
+        private var lastMeasuredHeight: CGFloat = 0
+        private var isMeasuringSize = false
+        private var heightInvalidated = false
         var imageLoader: (UUID) -> NSImage?
         var onImageDeleted: ((UUID) -> Void)?
         private var previousAttachmentIDs: Set<UUID> = []
@@ -161,7 +164,12 @@ struct RichTextEditor: NSViewRepresentable {
             }
             previousAttachmentIDs = currentIDs
 
-            textView.invalidateIntrinsicContentSize()
+            heightInvalidated = true
+            DispatchQueue.main.async { [weak self, weak textView] in
+                guard let self, let textView, self.heightInvalidated else { return }
+                self.heightInvalidated = false
+                textView.invalidateIntrinsicContentSize()
+            }
             scrollSelectionIntoView(for: textView)
         }
 
@@ -214,8 +222,20 @@ struct RichTextEditor: NSViewRepresentable {
         }
 
         func measuredHeight(for textView: NSTextView, width: CGFloat, minHeight: CGFloat) -> CGFloat {
+            guard !isMeasuringSize else {
+                return lastMeasuredHeight > 0 ? lastMeasuredHeight : minHeight
+            }
+
+            isMeasuringSize = true
+            defer { isMeasuringSize = false }
+
             guard let layoutManager = textView.layoutManager, let textContainer = textView.textContainer else {
                 return minHeight
+            }
+
+            // Return cache if width unchanged and content hasn't changed
+            if !heightInvalidated, abs(width - lastMeasuredWidth) < 0.5, lastMeasuredHeight > 0 {
+                return lastMeasuredHeight
             }
 
             lastMeasuredWidth = width
@@ -223,7 +243,9 @@ struct RichTextEditor: NSViewRepresentable {
             textContainer.containerSize = NSSize(width: contentWidth, height: CGFloat.greatestFiniteMagnitude)
             layoutManager.ensureLayout(for: textContainer)
             let usedRect = layoutManager.usedRect(for: textContainer)
-            return max(minHeight, ceil(usedRect.height + verticalPadding * 2))
+            let height = max(minHeight, ceil(usedRect.height + verticalPadding * 2))
+            lastMeasuredHeight = height
+            return height
         }
 
         // MARK: - Image marker helpers
