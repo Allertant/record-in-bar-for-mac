@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SettingsPageView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.colorScheme) private var colorScheme
 
     let settings: AppSettings?
     let onBack: () -> Void
@@ -38,6 +39,7 @@ struct SettingsPageView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
                         deepSeekSection(for: settings)
+                        appearanceSection(for: settings)
                         imageStorageSection(for: settings)
                     }
                     .padding(12)
@@ -138,6 +140,44 @@ struct SettingsPageView: View {
         }
     }
 
+    // MARK: - Appearance
+
+    @ViewBuilder
+    private func appearanceSection(for settings: AppSettings) -> some View {
+        Text("外观")
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.secondary)
+
+        PanelCard(tone: .settings) {
+            VStack(alignment: .leading, spacing: 10) {
+                Picker("模式", selection: Binding<Int>(
+                    get: {
+                        switch settings.appearanceMode {
+                        case "light": return 1
+                        case "dark": return 2
+                        default: return 0
+                        }
+                    },
+                    set: { index in
+                        switch index {
+                        case 1: settings.appearanceMode = "light"
+                        case 2: settings.appearanceMode = "dark"
+                        default: settings.appearanceMode = nil
+                        }
+                        settings.updatedAt = .now
+                        try? modelContext.save()
+                    }
+                )) {
+                    Text("跟随系统").tag(0)
+                    Text("浅色").tag(1)
+                    Text("深色").tag(2)
+                }
+                .pickerStyle(.segmented)
+                .controlSize(.small)
+            }
+        }
+    }
+
     // MARK: - Image Storage
 
     @ViewBuilder
@@ -200,7 +240,7 @@ struct SettingsPageView: View {
                         }
                     }
                     .padding(10)
-                    .background(Color.black.opacity(0.03))
+                    .background(colorScheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.03))
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
 

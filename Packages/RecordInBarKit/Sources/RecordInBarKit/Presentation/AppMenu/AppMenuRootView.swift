@@ -4,6 +4,7 @@ import SwiftUI
 public struct AppMenuRootView: View {
     public init() {}
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.colorScheme) private var colorScheme
     @Query(sort: \Topic.createdAt, order: .reverse) private var topics: [Topic]
     @Query private var notes: [NoteItem]
     @Query private var summaries: [AISummary]
@@ -53,6 +54,13 @@ public struct AppMenuRootView: View {
             }
             .animation(.spring(response: 0.35, dampingFraction: 0.85), value: route)
         }
+        .preferredColorScheme(settings.first.flatMap {
+            switch $0.appearanceMode {
+            case "dark": return ColorScheme.dark
+            case "light": return ColorScheme.light
+            default: return nil
+            }
+        })
         .task {
             SettingsBootstrap.ensureDefaultSettings(in: modelContext)
             KeywordCoordinator.resetAllKeywordsIfNeeded()
@@ -154,7 +162,7 @@ public struct AppMenuRootView: View {
                             HStack(spacing: 10) {
                                 Image(systemName: "square.and.pencil")
                                     .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(PanelCardTone.create.accent)
+                                    .foregroundStyle(PanelCardTone.create.accent(for: colorScheme))
 
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text("新建记录")
@@ -310,6 +318,7 @@ private struct HistoryCardView: View {
     let relativeTimeText: String
     let tone: PanelCardTone
     let onTap: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
 
     public var body: some View {
         Button(action: onTap) {
@@ -328,7 +337,7 @@ private struct HistoryCardView: View {
 
                     Text(relativeTimeText)
                         .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(tone.accent.opacity(0.82))
+                        .foregroundStyle(tone.accent(for: colorScheme).opacity(0.82))
                 }
 
                 HighlightedText(

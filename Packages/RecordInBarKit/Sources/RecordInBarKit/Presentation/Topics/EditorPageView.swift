@@ -4,6 +4,7 @@ import SwiftUI
 
 struct EditorPageView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.colorScheme) private var colorScheme
     @Query private var allTopics: [Topic]
     @Query(sort: \AISummary.createdAt, order: .reverse) private var summaries: [AISummary]
     @Query private var allNotes: [NoteItem]
@@ -132,7 +133,7 @@ struct EditorPageView: View {
                                     VStack(alignment: .leading, spacing: 8) {
                                         Text("AI 总结")
                                             .font(.system(size: 11, weight: .semibold))
-                                            .foregroundStyle(PanelCardTone.summary.accent)
+                                            .foregroundStyle(PanelCardTone.summary.accent(for: colorScheme))
 
                                         Text(latestSummary.summaryText)
                                             .font(.system(size: 12))
@@ -156,7 +157,7 @@ struct EditorPageView: View {
                                                 } label: {
                                                     Image(systemName: "doc.on.doc")
                                                         .font(.system(size: 11, weight: .semibold))
-                                                        .foregroundStyle(PanelCardTone.summary.accent)
+                                                        .foregroundStyle(PanelCardTone.summary.accent(for: colorScheme))
                                                 }
                                                 .buttonStyle(IconHoverButtonStyle())
                                             }
@@ -166,10 +167,10 @@ struct EditorPageView: View {
                                 }
                                 .padding(.horizontal, 18)
                                 .padding(.vertical, 16)
-                                .background(Color.white)
+                                .background(colorScheme == .dark ? Color(red: 0.14, green: 0.14, blue: 0.16) : Color.white)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                        .stroke(PanelCardTone.summary.border.opacity(0.7), lineWidth: 1)
+                                        .stroke(PanelCardTone.summary.border(for: colorScheme).opacity(0.7), lineWidth: 1)
                                 )
                                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                                 .shadow(color: .black.opacity(0.04), radius: 12, x: 0, y: 6)
@@ -409,7 +410,7 @@ struct EditorPageView: View {
                 .padding(.bottom, 10)
 
             Divider()
-                .overlay(Color.black.opacity(0.06))
+                .overlay(colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06))
 
             ZStack(alignment: .topLeading) {
                 RichTextEditor(
@@ -443,10 +444,10 @@ struct EditorPageView: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 18)
-        .background(Color.white)
+        .background(colorScheme == .dark ? Color(red: 0.14, green: 0.14, blue: 0.16) : Color.white)
         .overlay(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(Color.black.opacity(0.05), lineWidth: 1)
+                .stroke(colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.05), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .shadow(color: .black.opacity(0.04), radius: 12, x: 0, y: 6)
@@ -541,7 +542,7 @@ struct EditorPageView: View {
             return latestSummary(for: topic)?.summaryText
         }()
 
-        let card = ShareableNoteCard(title: draftTitle, note: draftNote, time: timeString, summary: summaryText)
+        let card = ShareableNoteCard(title: draftTitle, note: draftNote, time: timeString, summary: summaryText, colorScheme: colorScheme)
         let renderer = ImageRenderer(content: card)
         renderer.scale = 2.0
 
@@ -711,18 +712,19 @@ private struct ShareableNoteCard: View {
     let note: String
     let time: String
     let summary: String?
+    let colorScheme: ColorScheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(title.isEmpty ? "无标题" : title)
                 .font(.system(size: 20, weight: .bold))
-                .foregroundStyle(.primary)
+                .foregroundStyle(colorScheme == .dark ? .white : .primary)
 
             if !note.isEmpty {
                 Text(note)
                     .font(.system(size: 14))
                     .lineSpacing(6)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(colorScheme == .dark ? .white : .primary)
             }
 
             if let summary, !summary.isEmpty {
@@ -730,11 +732,11 @@ private struct ShareableNoteCard: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("AI 总结")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(PanelCardTone.summary.accent)
+                        .foregroundStyle(PanelCardTone.summary.accent(for: colorScheme))
                     Text(summary)
                         .font(.system(size: 13))
                         .lineSpacing(5)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(colorScheme == .dark ? .white : .primary)
                 }
             }
 
@@ -747,7 +749,7 @@ private struct ShareableNoteCard: View {
         }
         .padding(28)
         .frame(width: 400, alignment: .topLeading)
-        .background(Color.white)
+        .background(colorScheme == .dark ? Color(red: 0.14, green: 0.14, blue: 0.16) : .white)
     }
 }
 

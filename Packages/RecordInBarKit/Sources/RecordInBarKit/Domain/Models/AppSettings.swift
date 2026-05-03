@@ -12,6 +12,7 @@ public final class AppSettings {
     public var reasoningEffort: String
     public var imageStoragePath: String?
     public var includeAISummaryInShareImage: Bool?
+    public var appearanceMode: String?
     public var updatedAt: Date
 
     public init(
@@ -22,6 +23,7 @@ public final class AppSettings {
         reasoningEffort: String = "high",
         imageStoragePath: String? = nil,
         includeAISummaryInShareImage: Bool? = true,
+        appearanceMode: String? = nil,
         updatedAt: Date = .now
     ) {
         self.profile = profile
@@ -31,6 +33,7 @@ public final class AppSettings {
         self.reasoningEffort = reasoningEffort
         self.imageStoragePath = imageStoragePath
         self.includeAISummaryInShareImage = includeAISummaryInShareImage
+        self.appearanceMode = appearanceMode
         self.updatedAt = updatedAt
     }
 
