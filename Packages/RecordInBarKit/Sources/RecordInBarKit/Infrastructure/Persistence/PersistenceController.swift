@@ -13,6 +13,7 @@ public final class SharedPersistenceController {
         let schema = Schema([
             Topic.self,
             NoteItem.self,
+            NoteImage.self,
             AISummary.self,
             AppSettings.self
         ])

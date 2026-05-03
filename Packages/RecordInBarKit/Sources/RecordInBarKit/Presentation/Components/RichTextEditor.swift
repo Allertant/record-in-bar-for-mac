@@ -7,19 +7,22 @@ struct RichTextEditor: NSViewRepresentable {
     let font: NSFont
     let isEditable: Bool
     let verticalPadding: CGFloat
+    var onImagePasted: ((NSImage) -> Void)?
 
     init(
         text: Binding<String>,
         minHeight: CGFloat,
         font: NSFont = .systemFont(ofSize: 13),
         isEditable: Bool = true,
-        verticalPadding: CGFloat = 6
+        verticalPadding: CGFloat = 6,
+        onImagePasted: ((NSImage) -> Void)? = nil
     ) {
         self._text = text
         self.minHeight = minHeight
         self.font = font
         self.isEditable = isEditable
         self.verticalPadding = verticalPadding
+        self.onImagePasted = onImagePasted
     }
 
     func makeCoordinator() -> Coordinator {
@@ -29,8 +32,8 @@ struct RichTextEditor: NSViewRepresentable {
     func makeNSView(context: Context) -> InterceptingTextView {
         let textView = InterceptingTextView(frame: .zero)
         textView.delegate = context.coordinator
-        textView.isRichText = false
-        textView.importsGraphics = false
+        textView.isRichText = true
+        textView.importsGraphics = true
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDataDetectionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
@@ -49,11 +52,13 @@ struct RichTextEditor: NSViewRepresentable {
         textView.allowsUndo = true
         configure(textView, coordinator: context.coordinator)
         context.coordinator.applyExternalText(text, to: textView, preserveSelection: false)
+        textView.onImagePasted = onImagePasted
         return textView
     }
 
     func updateNSView(_ textView: InterceptingTextView, context: Context) {
         configure(textView, coordinator: context.coordinator)
+        textView.onImagePasted = onImagePasted
         if textView.string != text, !context.coordinator.isEditing {
             context.coordinator.applyExternalText(text, to: textView, preserveSelection: true)
         }
@@ -179,11 +184,41 @@ struct RichTextEditor: NSViewRepresentable {
 
 final class InterceptingTextView: NSTextView {
     override var isFlipped: Bool { true }
+    var onImagePasted: ((NSImage) -> Void)?
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
         guard let tc = textContainer, newSize.width > 0 else { return }
         let contentWidth = max(0, newSize.width - textContainerInset.width * 2)
         tc.containerSize = NSSize(width: contentWidth, height: .greatestFiniteMagnitude)
+    }
+
+    override func paste(_ sender: Any?) {
+        let pb = NSPasteboard.general
+        if let image = Self.imageFromPasteboard(pb) {
+            onImagePasted?(image)
+            return
+        }
+        super.pasteAsPlainText(sender)
+    }
+
+    private static func imageFromPasteboard(_ pb: NSPasteboard) -> NSImage? {
+        if let image = NSImage(pasteboard: pb) {
+            return image
+        }
+        if let data = pb.data(forType: .fileURL),
+           let urlString = String(data: data, encoding: .utf8),
+           let url = URL(string: urlString),
+           let image = NSImage(contentsOf: url) {
+            return image
+        }
+        let imageTypes: [NSPasteboard.PasteboardType] = [.tiff, .png]
+        for pbType in imageTypes {
+            if let data = pb.data(forType: pbType),
+               let image = NSImage(data: data) {
+                return image
+            }
+        }
+        return nil
     }
 }

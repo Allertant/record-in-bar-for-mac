@@ -8,6 +8,7 @@ struct EditorPageView: View {
     @Query(sort: \AISummary.createdAt, order: .reverse) private var summaries: [AISummary]
     @Query private var allNotes: [NoteItem]
     @Query private var allSummaries: [AISummary]
+    @Query(sort: \NoteImage.createdAt) private var noteImages: [NoteImage]
 
     @ObservedObject private var pinManager = PopoverPinManager.shared
 
@@ -415,7 +416,10 @@ struct EditorPageView: View {
                     minHeight: 100,
                     font: .systemFont(ofSize: 13),
                     isEditable: true,
-                    verticalPadding: 8
+                    verticalPadding: 8,
+                    onImagePasted: { image in
+                        savePastedImage(image)
+                    }
                 )
 
                 if draftNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -428,6 +432,10 @@ struct EditorPageView: View {
                 }
             }
             .padding(.top, 10)
+
+            if !imagesForCurrentTopic.isEmpty {
+                imageAttachmentSection
+            }
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 18)
@@ -649,6 +657,10 @@ struct EditorPageView: View {
                 .filter { $0.topicID == targetTopic.id }
                 .forEach(modelContext.delete)
 
+            let topicImages = noteImages.filter { $0.topicID == targetTopic.id }
+            topicImages.forEach { ImageStorage.deleteImage(relativePath: $0.relativePath) }
+            topicImages.forEach(modelContext.delete)
+
             allSummaries
                 .filter { $0.topicID == targetTopic.id }
                 .forEach(modelContext.delete)
@@ -712,5 +724,107 @@ private struct ShareableNoteCard: View {
         .padding(28)
         .frame(width: 400, alignment: .topLeading)
         .background(Color.white)
+    }
+}
+
+// MARK: - Image attachment helpers
+
+extension EditorPageView {
+    private var imagesForCurrentTopic: [NoteImage] {
+        guard let tid = topic?.id ?? loadedTopicID else { return [] }
+        return noteImages.filter { $0.topicID == tid }
+    }
+
+    private var imageAttachmentSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(imagesForCurrentTopic) { noteImage in
+                if let nsImage = ImageStorage.loadImage(relativePath: noteImage.relativePath) {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .scaledToFit()
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .contextMenu {
+                            Button("删除图片", role: .destructive) {
+                                deleteImage(noteImage)
+                            }
+                        }
+                }
+            }
+        }
+        .padding(.top, 10)
+    }
+
+    @MainActor
+    private func savePastedImage(_ image: NSImage) {
+        let targetID: UUID
+        if let existingID = topic?.id ?? loadedTopicID {
+            targetID = existingID
+        } else {
+            let newTopic = Topic(title: "", kind: .other)
+            modelContext.insert(newTopic)
+            loadedTopicID = newTopic.id
+            onPersistChange(newTopic.id)
+            targetID = newTopic.id
+        }
+
+        guard let jpegData = jpegDataForStorage(from: image) else { return }
+
+        let imageID = UUID()
+        do {
+            let relativePath = try ImageStorage.saveJPEG(data: jpegData, topicID: targetID, imageID: imageID)
+            let nextIndex = (noteImages.filter { $0.topicID == targetID }.map(\.sortIndex).max() ?? -1) + 1
+
+            let noteImage = NoteImage(
+                id: imageID,
+                topicID: targetID,
+                relativePath: relativePath,
+                fileName: "\(imageID.uuidString).jpg",
+                fileSize: jpegData.count,
+                width: image.size.width,
+                height: image.size.height,
+                sortIndex: nextIndex
+            )
+            modelContext.insert(noteImage)
+            try modelContext.save()
+        } catch {
+            print("保存图片失败：\(error)")
+        }
+    }
+
+    private func jpegDataForStorage(
+        from image: NSImage,
+        maxDimension: CGFloat = 2400,
+        maxBytes: Int = 4 * 1024 * 1024
+    ) -> Data? {
+        let resized: NSImage
+        if max(image.size.width, image.size.height) > maxDimension {
+            let scale = maxDimension / max(image.size.width, image.size.height)
+            let newSize = NSSize(width: image.size.width * scale, height: image.size.height * scale)
+            let tmp = NSImage(size: newSize)
+            tmp.lockFocus()
+            image.draw(in: NSRect(origin: .zero, size: newSize))
+            tmp.unlockFocus()
+            resized = tmp
+        } else {
+            resized = image
+        }
+
+        guard let tiffData = resized.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiffData) else { return nil }
+
+        for quality: CGFloat in [0.85, 0.75, 0.65, 0.55, 0.45] {
+            if let data = bitmap.representation(using: .jpeg, properties: [.compressionFactor: quality]),
+               data.count <= maxBytes {
+                return data
+            }
+        }
+        return bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.3])
+    }
+
+    @MainActor
+    private func deleteImage(_ noteImage: NoteImage) {
+        ImageStorage.deleteImage(relativePath: noteImage.relativePath)
+        modelContext.delete(noteImage)
+        try? modelContext.save()
     }
 }
