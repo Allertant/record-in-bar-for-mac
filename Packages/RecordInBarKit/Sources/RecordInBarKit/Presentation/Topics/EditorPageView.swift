@@ -542,7 +542,8 @@ struct EditorPageView: View {
             return latestSummary(for: topic)?.summaryText
         }()
 
-        let card = ShareableNoteCard(title: draftTitle, note: draftNote, time: timeString, summary: summaryText, colorScheme: colorScheme)
+        let segments = parseNoteSegments(draftNote)
+        let card = ShareableNoteCard(title: draftTitle, noteSegments: segments, time: timeString, summary: summaryText, colorScheme: colorScheme)
         let renderer = ImageRenderer(content: card)
         renderer.scale = 2.0
 
@@ -709,7 +710,7 @@ private struct CopyToastView: View {
 
 private struct ShareableNoteCard: View {
     let title: String
-    let note: String
+    let noteSegments: [ShareableNoteSegment]
     let time: String
     let summary: String?
     let colorScheme: ColorScheme
@@ -720,11 +721,24 @@ private struct ShareableNoteCard: View {
                 .font(.system(size: 20, weight: .bold))
                 .foregroundStyle(colorScheme == .dark ? .white : .primary)
 
-            if !note.isEmpty {
-                Text(note)
-                    .font(.system(size: 14))
-                    .lineSpacing(6)
-                    .foregroundStyle(colorScheme == .dark ? .white : .primary)
+            if !noteSegments.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(Array(noteSegments.enumerated()), id: \.offset) { _, segment in
+                        switch segment {
+                        case .text(let text):
+                            Text(text)
+                                .font(.system(size: 14))
+                                .lineSpacing(6)
+                                .foregroundStyle(colorScheme == .dark ? .white : .primary)
+                        case .image(let nsImage):
+                            Image(nsImage: nsImage)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(maxWidth: .infinity)
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        }
+                    }
+                }
             }
 
             if let summary, !summary.isEmpty {
@@ -753,9 +767,56 @@ private struct ShareableNoteCard: View {
     }
 }
 
+private enum ShareableNoteSegment {
+    case text(String)
+    case image(NSImage)
+}
+
 // MARK: - Image attachment helpers
 
 extension EditorPageView {
+    private func parseNoteSegments(_ text: String) -> [ShareableNoteSegment] {
+        let pattern = #"\[IMG:([0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})\]"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
+            return text.isEmpty ? [] : [.text(text)]
+        }
+
+        let nsText = text as NSString
+        let matches = regex.matches(in: text, options: [], range: NSRange(location: 0, length: nsText.length))
+
+        var segments: [ShareableNoteSegment] = []
+        var lastEnd = 0
+
+        for match in matches {
+            let fullRange = match.range
+            if fullRange.location > lastEnd {
+                let between = nsText.substring(with: NSRange(location: lastEnd, length: fullRange.location - lastEnd))
+                if !between.isEmpty {
+                    segments.append(.text(between))
+                }
+            }
+
+            let uuidRange = match.range(at: 1)
+            let uuidString = nsText.substring(with: uuidRange)
+            if let uuid = UUID(uuidString: uuidString),
+               let ni = noteImages.first(where: { $0.id == uuid }),
+               let image = ImageStorage.loadImage(relativePath: ni.relativePath) {
+                segments.append(.image(image))
+            }
+
+            lastEnd = fullRange.location + fullRange.length
+        }
+
+        if lastEnd < nsText.length {
+            let remaining = nsText.substring(from: lastEnd)
+            if !remaining.isEmpty {
+                segments.append(.text(remaining))
+            }
+        }
+
+        return segments
+    }
+
     @MainActor
     @discardableResult
     private func savePastedImage(_ image: NSImage) -> UUID? {
