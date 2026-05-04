@@ -182,6 +182,13 @@ struct RichTextEditor: NSViewRepresentable {
                 textView.insertText("  ", replacementRange: textView.selectedRange())
                 return true
             }
+            if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+                DispatchQueue.main.async { [weak self, weak textView] in
+                    guard let self, let textView else { return }
+                    self.revealInsertionPointAfterNewline(in: textView)
+                }
+                return false
+            }
             return false
         }
 
@@ -348,6 +355,36 @@ struct RichTextEditor: NSViewRepresentable {
             let selection = textView.selectedRange()
             guard selection.location != NSNotFound else { return }
             textView.scrollRangeToVisible(selection)
+        }
+
+        private func revealInsertionPointAfterNewline(in textView: NSTextView) {
+            guard let layoutManager = textView.layoutManager else {
+                scrollSelectionIntoView(for: textView)
+                return
+            }
+
+            let selection = textView.selectedRange()
+            guard selection.location != NSNotFound else { return }
+
+            if selection.location == (textView.textStorage?.length ?? 0) {
+                let extraLineRect = layoutManager.extraLineFragmentRect
+                if !extraLineRect.isEmpty {
+                    let targetRect = extraLineRect.insetBy(dx: 0, dy: -extraLineRect.height)
+                    textView.scrollToVisible(targetRect)
+                    return
+                }
+            }
+
+            let visibleLocation = max(0, selection.location - 1)
+            let glyphIndex = layoutManager.glyphIndexForCharacter(at: visibleLocation)
+            let lineRect = layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
+            let targetRect = NSRect(
+                x: lineRect.minX,
+                y: lineRect.maxY - 1,
+                width: max(1, lineRect.width),
+                height: max(lineRect.height * 1.5, 24)
+            )
+            textView.scrollToVisible(targetRect)
         }
     }
 }
