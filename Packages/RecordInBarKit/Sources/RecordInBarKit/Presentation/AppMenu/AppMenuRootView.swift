@@ -17,6 +17,8 @@ public struct AppMenuRootView: View {
     @State private var searchText = ""
     @State private var pageReferenceDate = Date()
     @State private var cachedKeywords: [String] = []
+    @State private var mainPageScrollOffsetY: CGFloat = 0
+    @State private var pendingMainPageRestoreOffsetY: CGFloat?
 
     private enum Route {
         case main
@@ -85,6 +87,11 @@ public struct AppMenuRootView: View {
 
     @MainActor
     private func navigate(to newRoute: Route) {
+        if route == .main, newRoute != .main {
+            pendingMainPageRestoreOffsetY = mainPageScrollOffsetY
+        } else if newRoute == .main, pendingMainPageRestoreOffsetY == nil {
+            pendingMainPageRestoreOffsetY = mainPageScrollOffsetY
+        }
         withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
             route = newRoute
         }
@@ -153,7 +160,10 @@ public struct AppMenuRootView: View {
                 Color.clear.frame(width: 1, height: 1)
             }
 
-            ScrollView {
+            ObservableVerticalScrollView(
+                contentOffsetY: $mainPageScrollOffsetY,
+                restoreOffsetY: $pendingMainPageRestoreOffsetY
+            ) {
                 VStack(alignment: .leading, spacing: 10) {
                     Button {
                         createTopicAndOpenEditor()
@@ -191,29 +201,29 @@ public struct AppMenuRootView: View {
                             .foregroundStyle(.secondary)
 
                         LazyVStack(spacing: 8) {
-                        ForEach(filteredTopics) { topic in
-                            HistoryCardView(
-                                topic: topic,
-                                notePreview: previewText(for: topic),
-                                query: searchText,
-                                relativeTimeText: HistoryTimeFormatter.string(for: topic.createdAt),
-                                tone: historyTone(for: topic)
-                            ) {
-                                selectedTopicID = topic.id
-                                navigate(to: .editor)
+                            ForEach(filteredTopics) { topic in
+                                HistoryCardView(
+                                    topic: topic,
+                                    notePreview: previewText(for: topic),
+                                    query: searchText,
+                                    relativeTimeText: HistoryTimeFormatter.string(for: topic.createdAt),
+                                    tone: historyTone(for: topic)
+                                ) {
+                                    selectedTopicID = topic.id
+                                    navigate(to: .editor)
+                                }
+                            }
+
+                            if filteredTopics.isEmpty {
+                                ContentUnavailableView(
+                                    "暂无历史记录",
+                                    systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90",
+                                    description: Text("请先创建记录，或调整搜索关键词。")
+                                )
+                                .frame(maxWidth: .infinity)
+                                .padding(.top, 24)
                             }
                         }
-
-                        if filteredTopics.isEmpty {
-                            ContentUnavailableView(
-                                "暂无历史记录",
-                                systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90",
-                                description: Text("请先创建记录，或调整搜索关键词。")
-                            )
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 24)
-                        }
-                    }
                     }
                 }
                 .padding(12)
@@ -223,7 +233,6 @@ public struct AppMenuRootView: View {
                         .onTapGesture { NSApp.keyWindow?.makeFirstResponder(nil) }
                 )
             }
-            .scrollIndicators(.hidden)
 
             Divider()
 
