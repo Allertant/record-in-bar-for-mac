@@ -441,6 +441,16 @@ struct EditorPageView: View {
                 }
             }
             .padding(.top, 10)
+
+            HStack {
+                Spacer()
+
+                Text(noteStatsText)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.top, 8)
+            .frame(maxWidth: .infinity, minHeight: 20, alignment: .trailing)
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 18)
@@ -461,6 +471,32 @@ struct EditorPageView: View {
                 scheduleDraftPersistence(existingTopicID: topic?.id)
             }
         )
+    }
+
+    private var visibleNoteText: String {
+        draftNote.replacingOccurrences(
+            of: #"\[IMG:[0-9A-Fa-f\-]+\]"#,
+            with: "",
+            options: .regularExpression
+        )
+    }
+
+    private var noteCharacterCount: Int {
+        visibleNoteText.filter { !$0.isNewline }.count
+    }
+
+    private var noteImageCount: Int {
+        let pattern = #"\[IMG:[0-9A-Fa-f\-]+\]"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return 0 }
+        let range = NSRange(draftNote.startIndex..., in: draftNote)
+        return regex.numberOfMatches(in: draftNote, range: range)
+    }
+
+    private var noteStatsText: String {
+        if noteImageCount > 0 {
+            return "\(noteCharacterCount) 字 · \(noteImageCount) 图"
+        }
+        return "\(noteCharacterCount) 字"
     }
 
     private func noteBinding(for topic: Topic?) -> Binding<String> {
