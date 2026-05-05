@@ -69,7 +69,9 @@ struct RichTextEditor: NSViewRepresentable {
         context.coordinator.onImageDeleted = onImageDeleted
 
         let currentMarkerText = Self.Coordinator.stringWithImageMarkers(from: textView)
-        if currentMarkerText != text, !context.coordinator.isEditing {
+        if currentMarkerText != text,
+           !context.coordinator.isEditing,
+           !context.coordinator.isShowingDeferredImagePlaceholders {
             context.coordinator.applyExternalText(text, to: textView, preserveSelection: true)
         }
     }
@@ -130,6 +132,7 @@ struct RichTextEditor: NSViewRepresentable {
         private let verticalPadding: CGFloat
         private var isApplyingProgrammaticChange = false
         private(set) var isEditing = false
+        private(set) var isShowingDeferredImagePlaceholders = false
         private(set) var lastMeasuredWidth: CGFloat = 320
         private var lastMeasuredHeight: CGFloat = 0
         private var isMeasuringSize = false
@@ -202,6 +205,11 @@ struct RichTextEditor: NSViewRepresentable {
         }
 
         func applyExternalText(_ newText: String, to textView: NSTextView, preserveSelection: Bool) {
+            if !preserveSelection, Self.hasImageMarkers(newText) {
+                applyDeferredImageText(newText, to: textView)
+                return
+            }
+
             let selectedRange = textView.selectedRange()
             isApplyingProgrammaticChange = true
 
@@ -226,7 +234,30 @@ struct RichTextEditor: NSViewRepresentable {
             }
 
             isApplyingProgrammaticChange = false
+            isShowingDeferredImagePlaceholders = false
             scrollSelectionIntoView(for: textView)
+        }
+
+        private func applyDeferredImageText(_ newText: String, to textView: NSTextView) {
+            let placeholder = Self.attributedStringFromMarkedText(
+                newText,
+                font: font,
+                imageLoader: imageLoader,
+                renderImages: false
+            )
+
+            isApplyingProgrammaticChange = true
+            isShowingDeferredImagePlaceholders = true
+            textView.textStorage?.setAttributedString(placeholder)
+            textView.setSelectedRange(NSRange(location: textView.textStorage?.length ?? 0, length: 0))
+            isApplyingProgrammaticChange = false
+
+            DispatchQueue.main.async { [weak self, weak textView] in
+                guard let self, let textView else { return }
+                guard self.isShowingDeferredImagePlaceholders else { return }
+                guard !self.isEditing else { return }
+                self.applyExternalText(newText, to: textView, preserveSelection: true)
+            }
         }
 
         func measuredHeight(for textView: NSTextView, width: CGFloat, minHeight: CGFloat) -> CGFloat {
@@ -293,7 +324,8 @@ struct RichTextEditor: NSViewRepresentable {
         static func attributedStringFromMarkedText(
             _ markedText: String,
             font: NSFont,
-            imageLoader: (UUID) -> NSImage?
+            imageLoader: (UUID) -> NSImage?,
+            renderImages: Bool = true
         ) -> NSAttributedString {
             let normalAttrs: [NSAttributedString.Key: Any] = [
                 .font: font,
@@ -325,7 +357,7 @@ struct RichTextEditor: NSViewRepresentable {
 
                 let uuidRange = Range(match.range(at: 1), in: markedText)!
                 let uuidString = String(markedText[uuidRange])
-                if let uuid = UUID(uuidString: uuidString), let image = imageLoader(uuid) {
+                if renderImages, let uuid = UUID(uuidString: uuidString), let image = imageLoader(uuid) {
                     let attachment = ImageTextAttachment(image: image, imageID: uuid)
                     let imageAttrs: [NSAttributedString.Key: Any] = [
                         .paragraphStyle: RichTextEditor.imageParagraphStyle()
@@ -335,7 +367,7 @@ struct RichTextEditor: NSViewRepresentable {
                     mutable.addAttributes(imageAttrs, range: NSRange(location: 0, length: mutable.length))
                     result.append(mutable)
                 } else {
-                    result.append(NSAttributedString(string: "[IMG:\(uuidString)]", attributes: normalAttrs))
+                    result.append(NSAttributedString(string: "[图片]", attributes: normalAttrs))
                 }
 
                 // Insert generated \n after attachment with image paragraph style
@@ -349,6 +381,10 @@ struct RichTextEditor: NSViewRepresentable {
             }
 
             return result
+        }
+
+        static func hasImageMarkers(_ markedText: String) -> Bool {
+            markedText.contains("[IMG:")
         }
 
         private func scrollSelectionIntoView(for textView: NSTextView) {

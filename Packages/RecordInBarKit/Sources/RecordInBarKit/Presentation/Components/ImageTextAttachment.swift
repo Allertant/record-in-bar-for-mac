@@ -5,6 +5,7 @@ extension NSAttributedString.Key {
 }
 
 final class ImageTextAttachment: NSTextAttachment {
+    private static let preferredDisplayWidth: CGFloat = 280
     let imageID: UUID
 
     init(image: NSImage, imageID: UUID) {
@@ -32,7 +33,11 @@ final class ImageTextAttachment: NSTextAttachment {
         characterIndex charIndex: Int
     ) -> CGRect {
         guard let image else { return .zero }
-        let maxWidth = (textContainer?.containerSize.width ?? frag.width) - 4
+
+        // Keep image sizing stable so attachments don't participate in repeated
+        // container width negotiation inside the popover.
+        let proposedWidth = max(textContainer?.containerSize.width ?? 0, frag.width)
+        let maxWidth = proposedWidth > 0 ? min(proposedWidth - 4, Self.preferredDisplayWidth) : Self.preferredDisplayWidth
         guard maxWidth > 0 else { return .zero }
         let aspectRatio = image.size.width / image.size.height
         let displayWidth = min(maxWidth, image.size.width)
