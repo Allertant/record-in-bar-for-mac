@@ -32,6 +32,7 @@ struct EditorPageView: View {
     @State private var headerReferenceDate = Date()
     @State private var imagePreviewPanel: NSPanel?
     @State private var imagePreviewParentWindowNumber: Int?
+    @State private var currentPreviewImageID: UUID?
     @State private var imagePreviewTask: Task<Void, Never>?
     @State private var pendingPersistTask: Task<Void, Never>?
 
@@ -891,6 +892,7 @@ extension EditorPageView {
             guard !Task.isCancelled, let image else { return }
 
             await MainActor.run {
+                currentPreviewImageID = uuid
                 let screenFrame = targetScreen?.visibleFrame ?? NSScreen.screens.first?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1200, height: 800)
                 let panelSize = previousPanelSize ?? NSSize(
                     width: min(max(screenFrame.width * 0.72, 760), 1280),
@@ -917,7 +919,21 @@ extension EditorPageView {
                 panel.collectionBehavior = [.fullScreenAuxiliary, .moveToActiveSpace]
                 panel.minSize = NSSize(width: 420, height: 320)
 
-                let hosting = NSHostingController(rootView: ImagePreviewView(image: image))
+                let hosting = NSHostingController(
+                    rootView: ImagePreviewView(
+                        image: image,
+                        canGoPrevious: previousPreviewImageID(for: uuid) != nil,
+                        canGoNext: nextPreviewImageID(for: uuid) != nil,
+                        onPrevious: {
+                            guard let previousID = previousPreviewImageID(for: uuid) else { return }
+                            openImagePreview(uuid: previousID)
+                        },
+                        onNext: {
+                            guard let nextID = nextPreviewImageID(for: uuid) else { return }
+                            openImagePreview(uuid: nextID)
+                        }
+                    )
+                )
                 hosting.sizingOptions = []
                 panel.contentViewController = hosting
                 panel.setFrame(NSRect(origin: centeredOrigin, size: panelSize), display: true)
@@ -950,6 +966,7 @@ extension EditorPageView {
         }
         imagePreviewPanel = nil
         imagePreviewParentWindowNumber = nil
+        currentPreviewImageID = nil
     }
 
     @MainActor
@@ -966,6 +983,34 @@ extension EditorPageView {
         return NSScreen.main
     }
 
+    private var previewImagesForCurrentTopic: [NoteImage] {
+        guard let topicID = topic?.id ?? loadedTopicID else { return [] }
+        return noteImages
+            .filter { $0.topicID == topicID }
+            .sorted {
+                if $0.sortIndex == $1.sortIndex {
+                    return $0.createdAt < $1.createdAt
+                }
+                return $0.sortIndex < $1.sortIndex
+            }
+    }
+
+    private func previousPreviewImageID(for imageID: UUID) -> UUID? {
+        guard let index = previewImagesForCurrentTopic.firstIndex(where: { $0.id == imageID }), index > 0 else {
+            return nil
+        }
+        return previewImagesForCurrentTopic[index - 1].id
+    }
+
+    private func nextPreviewImageID(for imageID: UUID) -> UUID? {
+        guard let index = previewImagesForCurrentTopic.firstIndex(where: { $0.id == imageID }) else {
+            return nil
+        }
+        let nextIndex = index + 1
+        guard previewImagesForCurrentTopic.indices.contains(nextIndex) else { return nil }
+        return previewImagesForCurrentTopic[nextIndex].id
+    }
+
     @MainActor
     private func deleteImage(_ noteImage: NoteImage) {
         ImageStorage.deleteImage(relativePath: noteImage.relativePath)
@@ -976,6 +1021,10 @@ extension EditorPageView {
 
 private struct ImagePreviewView: View {
     let image: NSImage
+    let canGoPrevious: Bool
+    let canGoNext: Bool
+    let onPrevious: () -> Void
+    let onNext: () -> Void
     @State private var currentScale: CGFloat = 1.0
     @GestureState private var pinchScale: CGFloat = 1.0
 
@@ -985,32 +1034,51 @@ private struct ImagePreviewView: View {
 
     var body: some View {
         GeometryReader { geo in
-            ScrollView([.horizontal, .vertical]) {
-                let baseScale = min(
-                    geo.size.width / max(image.size.width, 1),
-                    geo.size.height / max(image.size.height, 1),
-                    1
-                )
-                let displayWidth = max(120, image.size.width * baseScale * totalScale)
-                let displayHeight = max(120, image.size.height * baseScale * totalScale)
+            VStack(spacing: 0) {
+                HStack(spacing: 10) {
+                    Button("上一张", action: onPrevious)
+                        .buttonStyle(.bordered)
+                        .disabled(!canGoPrevious)
 
-                Image(nsImage: image)
-                    .resizable()
-                    .interpolation(.high)
-                    .frame(width: displayWidth, height: displayHeight)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                    .padding(24)
-                    .gesture(
-                        MagnifyGesture()
-                            .updating($pinchScale) { value, state, _ in
-                                state = value.magnification
-                            }
-                            .onEnded { value in
-                                currentScale = max(0.3, min(currentScale * value.magnification, 8.0))
-                            }
+                    Spacer()
+
+                    Button("下一张", action: onNext)
+                        .buttonStyle(.bordered)
+                        .disabled(!canGoNext)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(Color(nsColor: .controlBackgroundColor))
+
+                Divider()
+
+                ScrollView([.horizontal, .vertical]) {
+                    let baseScale = min(
+                        geo.size.width / max(image.size.width, 1),
+                        geo.size.height / max(image.size.height, 1),
+                        1
                     )
+                    let displayWidth = max(120, image.size.width * baseScale * totalScale)
+                    let displayHeight = max(120, image.size.height * baseScale * totalScale)
+
+                    Image(nsImage: image)
+                        .resizable()
+                        .interpolation(.high)
+                        .frame(width: displayWidth, height: displayHeight)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                        .padding(24)
+                        .gesture(
+                            MagnifyGesture()
+                                .updating($pinchScale) { value, state, _ in
+                                    state = value.magnification
+                                }
+                                .onEnded { value in
+                                    currentScale = max(0.3, min(currentScale * value.magnification, 8.0))
+                                }
+                        )
+                }
+                .background(Color(nsColor: .windowBackgroundColor))
             }
-            .background(Color(nsColor: .windowBackgroundColor))
         }
     }
 }
