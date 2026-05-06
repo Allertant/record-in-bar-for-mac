@@ -988,15 +988,23 @@ extension EditorPageView {
     }
 
     private var previewImagesForCurrentTopic: [NoteImage] {
-        guard let topicID = topic?.id ?? loadedTopicID else { return [] }
-        return noteImages
-            .filter { $0.topicID == topicID }
-            .sorted {
-                if $0.sortIndex == $1.sortIndex {
-                    return $0.createdAt < $1.createdAt
-                }
-                return $0.sortIndex < $1.sortIndex
-            }
+        let orderedIDs = previewImageIDsInDraftOrder
+        guard !orderedIDs.isEmpty else { return [] }
+
+        let imagesByID = Dictionary(uniqueKeysWithValues: noteImages.map { ($0.id, $0) })
+        return orderedIDs.compactMap { imagesByID[$0] }
+    }
+
+    private var previewImageIDsInDraftOrder: [UUID] {
+        let pattern = #"\[IMG:([0-9A-Fa-f\-]+)\]"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+
+        let range = NSRange(draftNote.startIndex..., in: draftNote)
+        let matches = regex.matches(in: draftNote, range: range)
+        return matches.compactMap { match in
+            guard let uuidRange = Range(match.range(at: 1), in: draftNote) else { return nil }
+            return UUID(uuidString: String(draftNote[uuidRange]))
+        }
     }
 
     private func previousPreviewImageID(for imageID: UUID) -> UUID? {
