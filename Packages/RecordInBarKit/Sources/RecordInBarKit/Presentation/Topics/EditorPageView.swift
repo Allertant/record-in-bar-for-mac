@@ -31,6 +31,7 @@ struct EditorPageView: View {
     @State private var shareSuccessMessage = ""
     @State private var headerReferenceDate = Date()
     @State private var imagePreviewPanel: NSPanel?
+    @State private var imagePreviewParentWindowNumber: Int?
     @State private var imagePreviewTask: Task<Void, Never>?
     @State private var pendingPersistTask: Task<Void, Never>?
 
@@ -193,8 +194,7 @@ struct EditorPageView: View {
         .onDisappear {
             imagePreviewTask?.cancel()
             imagePreviewTask = nil
-            imagePreviewPanel?.close()
-            imagePreviewPanel = nil
+            closeImagePreviewPanel()
             flushDraftPersistence(existingTopicID: topic?.id)
         }
         .overlay { modalOverlay }
@@ -879,11 +879,11 @@ extension EditorPageView {
         }
 
         imagePreviewTask?.cancel()
-        imagePreviewPanel?.close()
-        imagePreviewPanel = nil
+        closeImagePreviewPanel()
 
         let relativePath = ni.relativePath
         let targetScreen = imagePreviewScreen()
+        let parentWindow = NSApp.keyWindow ?? NSApp.mainWindow
 
         imagePreviewTask = Task.detached(priority: .userInitiated) {
             let image = ImageStorage.loadImage(relativePath: relativePath)
@@ -898,13 +898,17 @@ extension EditorPageView {
 
                 let panel = NSPanel(
                     contentRect: NSRect(origin: .zero, size: panelSize),
-                    styleMask: [.titled, .closable, .resizable],
+                    styleMask: [.titled, .closable, .resizable, .nonactivatingPanel],
                     backing: .buffered,
                     defer: false
                 )
                 panel.title = "图片预览"
                 panel.level = .floating
+                panel.isFloatingPanel = true
                 panel.isReleasedWhenClosed = false
+                panel.becomesKeyOnlyIfNeeded = true
+                panel.hidesOnDeactivate = false
+                panel.worksWhenModal = true
                 panel.collectionBehavior = [.fullScreenAuxiliary, .moveToActiveSpace]
                 panel.minSize = NSSize(width: 420, height: 320)
 
@@ -912,14 +916,42 @@ extension EditorPageView {
                 hosting.sizingOptions = []
                 panel.contentViewController = hosting
                 panel.setFrame(NSRect(origin: .zero, size: panelSize), display: true)
-                panel.center()
 
-                panel.makeKeyAndOrderFront(nil)
-                NSApp.activate(ignoringOtherApps: true)
+                if let parentWindow {
+                    let parentFrame = parentWindow.frame
+                    let origin = NSPoint(
+                        x: parentFrame.midX - panelSize.width / 2,
+                        y: parentFrame.midY - panelSize.height / 2
+                    )
+                    panel.setFrameOrigin(origin)
+                    parentWindow.addChildWindow(panel, ordered: .above)
+                    imagePreviewParentWindowNumber = parentWindow.windowNumber
+                    panel.orderFront(nil)
+                } else {
+                    panel.center()
+                    panel.orderFrontRegardless()
+                    imagePreviewParentWindowNumber = nil
+                }
+
                 imagePreviewPanel = panel
                 imagePreviewTask = nil
             }
         }
+    }
+
+    @MainActor
+    private func closeImagePreviewPanel() {
+        if let panel = imagePreviewPanel {
+            if let parent = panel.parent {
+                parent.removeChildWindow(panel)
+            } else if let parentWindowNumber = imagePreviewParentWindowNumber,
+                      let parent = NSApp.windows.first(where: { $0.windowNumber == parentWindowNumber }) {
+                parent.removeChildWindow(panel)
+            }
+            panel.close()
+        }
+        imagePreviewPanel = nil
+        imagePreviewParentWindowNumber = nil
     }
 
     @MainActor
