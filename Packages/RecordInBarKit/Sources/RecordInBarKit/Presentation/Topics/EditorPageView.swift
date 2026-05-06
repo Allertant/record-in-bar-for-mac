@@ -3,14 +3,14 @@ import SwiftData
 import SwiftUI
 
 struct EditorPageView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Environment(\.colorScheme) private var colorScheme
-    @Query private var allTopics: [Topic]
-    @Query(sort: \AISummary.createdAt, order: .reverse) private var summaries: [AISummary]
-    @Query private var allNotes: [NoteItem]
-    @Query private var allSummaries: [AISummary]
+    @Environment(\.modelContext) var modelContext
+    @Environment(\.colorScheme) var colorScheme
+    @Query var allTopics: [Topic]
+    @Query(sort: \AISummary.createdAt, order: .reverse) var summaries: [AISummary]
+    @Query var allNotes: [NoteItem]
+    @Query var allSummaries: [AISummary]
     @Query(sort: \NoteImage.createdAt) var noteImages: [NoteImage]
-    @Query private var appSettings: [AppSettings]
+    @Query var appSettings: [AppSettings]
 
     @ObservedObject private var pinManager = PopoverPinManager.shared
 
@@ -20,22 +20,24 @@ struct EditorPageView: View {
     let onBack: () -> Void
     let onDelete: () -> Void
 
-    @State private var showDeleteConfirmation = false
-    @State private var draftTitle = ""
+    @State var showDeleteConfirmation = false
+    @State var draftTitle = ""
     @State var draftNote = ""
-    @State private var loadedTopicID: UUID?
+    @State var loadedTopicID: UUID?
     @State private var showCopiedToast = false
-    @State private var showShareSheet = false
-    @State private var isGeneratingImage = false
-    @State private var showShareSuccess = false
-    @State private var shareSuccessMessage = ""
+    @State var showShareSheet = false
+    @State var isGeneratingImage = false
+    @State var showShareSuccess = false
+    @State var shareSuccessMessage = ""
+    @State var previewImage: NSImage?
+    @State var showImagePreview = false
     @State private var headerReferenceDate = Date()
     @State var imagePreviewPanel: NSPanel?
     @State var imagePreviewParentWindowNumber: Int?
     @State var currentPreviewImageID: UUID?
     @State var imagePreviewState = ImagePreviewState()
     @State var imagePreviewTask: Task<Void, Never>?
-    @State private var pendingPersistTask: Task<Void, Never>?
+    @State var pendingPersistTask: Task<Void, Never>?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -206,7 +208,7 @@ struct EditorPageView: View {
     // MARK: - Single always-present modal overlay
 
     private var hasActiveModal: Bool {
-        showShareSheet || showDeleteConfirmation
+        showShareSheet || showDeleteConfirmation || showImagePreview
     }
 
     @ViewBuilder
@@ -235,6 +237,9 @@ struct EditorPageView: View {
             )
             .background(.regularMaterial)
             .opacity(showDeleteConfirmation ? 1 : 0)
+
+            shareImagePreviewPanel
+                .opacity(showImagePreview ? 1 : 0)
         }
         .allowsHitTesting(hasActiveModal)
         .animation(.spring(response: 0.3, dampingFraction: 0.85), value: hasActiveModal)
@@ -243,6 +248,62 @@ struct EditorPageView: View {
     private func dismissAllModals() {
         showShareSheet = false
         showDeleteConfirmation = false
+        showImagePreview = false
+        previewImage = nil
+    }
+
+    @ViewBuilder
+    private var shareImagePreviewPanel: some View {
+        if let nsImage = previewImage {
+            GeometryReader { geo in
+                let available = geo.size
+                let imgAspect = nsImage.size.width / nsImage.size.height
+                let displayWidth = min(available.width - 32, nsImage.size.width)
+                let displayHeight = displayWidth / imgAspect
+                let needsScroll = displayHeight > available.height - 32
+
+                if needsScroll {
+                    ScrollView {
+                        VStack(spacing: 12) {
+                            Image(nsImage: nsImage)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(width: displayWidth)
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                            Button("关闭预览") { closeShareImagePreview() }
+                                .buttonStyle(.plain)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(Color.black.opacity(0.6))
+                                .clipShape(Capsule())
+                        }
+                        .padding(.vertical, 16)
+                        .frame(maxWidth: .infinity)
+                    }
+                } else {
+                    VStack(spacing: 12) {
+                        Image(nsImage: nsImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: displayWidth)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                        Button("关闭预览") { closeShareImagePreview() }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(Color.black.opacity(0.6))
+                            .clipShape(Capsule())
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+        }
     }
 
     @ViewBuilder
@@ -470,7 +531,7 @@ struct EditorPageView: View {
         AISummaryCoordinator.enqueue(topicID: topic.id)
     }
 
-    private func latestSummary(for topic: Topic) -> AISummary? {
+    func latestSummary(for topic: Topic) -> AISummary? {
         summaries.first(where: { $0.topicID == topic.id })
     }
 
@@ -492,392 +553,10 @@ struct EditorPageView: View {
         }
     }
 
-    @MainActor
-    private func shareText() {
-        var text = ""
-        if !draftTitle.isEmpty {
-            text += draftTitle
-        }
-        if !draftNote.isEmpty {
-            if !text.isEmpty { text += "\n\n" }
-            text += draftNote
-        }
-        guard !text.isEmpty else { return }
-
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
-
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-            showShareSheet = false
-        }
-        showShareSuccessToast(message: "文字复制成功")
-    }
-
-    @MainActor
-    private func generateAndShareImage() {
-        guard !draftTitle.isEmpty || !draftNote.isEmpty else { return }
-        isGeneratingImage = true
-
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy/MM/dd HH:mm"
-        let timeString = dateFormatter.string(from: Date())
-
-        let includeSummary = appSettings.first?.includeAISummaryInShareImage ?? true
-        let summaryText: String? = {
-            guard includeSummary, let topic else { return nil }
-            return latestSummary(for: topic)?.summaryText
-        }()
-
-        let segments = parseNoteSegments(draftNote)
-        let card = ShareableNoteCard(title: draftTitle, noteSegments: segments, time: timeString, summary: summaryText, colorScheme: colorScheme)
-        let renderer = ImageRenderer(content: card)
-        renderer.scale = 2.0
-
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(100))
-
-            guard let nsImage = renderer.nsImage else {
-                isGeneratingImage = false
-                return
-            }
-
-            let pasteboard = NSPasteboard.general
-            pasteboard.clearContents()
-            pasteboard.setData(nsImage.tiffRepresentation!, forType: .tiff)
-
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                showShareSheet = false
-                isGeneratingImage = false
-            }
-            showShareSuccessToast(message: "图片复制成功")
-        }
-    }
-
-    @MainActor
-    private func showShareSuccessToast(message: String) {
-        shareSuccessMessage = message
-        withAnimation(.easeOut(duration: 0.18)) {
-            showShareSuccess = true
-        }
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(1200))
-            withAnimation(.easeIn(duration: 0.28)) {
-                showShareSuccess = false
-            }
-        }
-    }
-
-    @MainActor
-    private func loadDraftIfNeeded() {
-        pendingPersistTask?.cancel()
-        pendingPersistTask = nil
-        let currentID = topic?.id
-        guard loadedTopicID != currentID else { return }
-
-        loadedTopicID = currentID
-        draftTitle = topic?.title ?? ""
-        draftNote = note?.content ?? ""
-        showDeleteConfirmation = false
-    }
-
-    @MainActor
-    private func scheduleDraftPersistence(existingTopicID: UUID?) {
-        pendingPersistTask?.cancel()
-        pendingPersistTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(300))
-            guard !Task.isCancelled else { return }
-            persistDraft(existingTopicID: existingTopicID)
-            pendingPersistTask = nil
-        }
-    }
-
-    @MainActor
-    private func flushDraftPersistence(existingTopicID: UUID?) {
-        pendingPersistTask?.cancel()
-        pendingPersistTask = nil
-        persistDraft(existingTopicID: existingTopicID)
-    }
-
-    @MainActor
-    private func persistDraft(existingTopicID: UUID?) {
-        let trimmedTitle = draftTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedNote = draftNote.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard existingTopicID != nil || loadedTopicID != nil || !trimmedTitle.isEmpty || !trimmedNote.isEmpty else {
-            return
-        }
-
-        let targetTopic: Topic
-        if let existingTopicID, let existingTopic = allTopics.first(where: { $0.id == existingTopicID }) {
-            targetTopic = existingTopic
-        } else if let loadedTopicID {
-            guard let storedTopic = allTopics.first(where: { $0.id == loadedTopicID }) else {
-                return
-            }
-            targetTopic = storedTopic
-        } else {
-            let createdTopic = Topic(title: trimmedTitle, kind: .other)
-            modelContext.insert(createdTopic)
-            targetTopic = createdTopic
-            loadedTopicID = createdTopic.id
-            onPersistChange(createdTopic.id)
-        }
-
-        targetTopic.title = draftTitle
-        targetTopic.updatedAt = .now
-
-        let existingNotes = allNotes
-            .filter { $0.topicID == targetTopic.id }
-            .sorted(using: KeyPathComparator(\.updatedAt, order: .reverse))
-
-        if let firstNote = existingNotes.first {
-            if trimmedNote.isEmpty {
-                modelContext.delete(firstNote)
-            } else {
-                firstNote.content = draftNote
-                firstNote.updatedAt = .now
-            }
-        } else if !trimmedNote.isEmpty {
-            let createdNote = NoteItem(topicID: targetTopic.id, content: draftNote)
-            modelContext.insert(createdNote)
-        }
-
-        if trimmedTitle.isEmpty && trimmedNote.isEmpty {
-            allNotes
-                .filter { $0.topicID == targetTopic.id }
-                .forEach(modelContext.delete)
-
-            let topicImages = noteImages.filter { $0.topicID == targetTopic.id }
-            topicImages.forEach { ImageStorage.deleteImage(relativePath: $0.relativePath) }
-            topicImages.forEach(modelContext.delete)
-
-            allSummaries
-                .filter { $0.topicID == targetTopic.id }
-                .forEach(modelContext.delete)
-
-            modelContext.delete(targetTopic)
-            loadedTopicID = nil
-            onPersistChange(nil)
-        }
-
-        try? modelContext.save()
-    }
-
     private func updateTimeHeader(for topic: Topic) -> some View {
         Text(RelativeTimeFormatter.string(for: topic.updatedAt, reference: headerReferenceDate))
             .font(.system(size: 10))
             .foregroundStyle(.tertiary)
             .padding(.leading, -4)
-    }
-}
-
-private struct CopyToastView: View {
-    let text: String
-
-    var body: some View {
-        Text(text)
-            .font(.system(size: 10, weight: .medium))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(Color.black.opacity(0.78))
-            .clipShape(Capsule())
-            .shadow(color: .black.opacity(0.12), radius: 4, x: 0, y: 2)
-    }
-}
-
-private struct ShareableNoteCard: View {
-    let title: String
-    let noteSegments: [ShareableNoteSegment]
-    let time: String
-    let summary: String?
-    let colorScheme: ColorScheme
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(title.isEmpty ? "无标题" : title)
-                .font(.system(size: 20, weight: .bold))
-                .foregroundStyle(colorScheme == .dark ? .white : .primary)
-
-            if !noteSegments.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(Array(noteSegments.enumerated()), id: \.offset) { _, segment in
-                        switch segment {
-                        case .text(let text):
-                            Text(text)
-                                .font(.system(size: 14))
-                                .lineSpacing(6)
-                                .foregroundStyle(colorScheme == .dark ? .white : .primary)
-                        case .image(let nsImage):
-                            Image(nsImage: nsImage)
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(maxWidth: .infinity)
-                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        }
-                    }
-                }
-            }
-
-            if let summary, !summary.isEmpty {
-                Divider()
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("AI 总结")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(PanelCardTone.summary.accent(for: colorScheme))
-                    Text(summary)
-                        .font(.system(size: 13))
-                        .lineSpacing(5)
-                        .foregroundStyle(colorScheme == .dark ? .white : .primary)
-                }
-            }
-
-            HStack {
-                Spacer()
-                Text(time)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.gray)
-            }
-        }
-        .padding(28)
-        .frame(width: 400, alignment: .topLeading)
-        .background(colorScheme == .dark ? Color(red: 0.14, green: 0.14, blue: 0.16) : .white)
-    }
-}
-
-private enum ShareableNoteSegment {
-    case text(String)
-    case image(NSImage)
-}
-
-// MARK: - Image attachment helpers
-
-extension EditorPageView {
-    private func parseNoteSegments(_ text: String) -> [ShareableNoteSegment] {
-        let pattern = #"\[IMG:([0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})\]"#
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
-            return text.isEmpty ? [] : [.text(text)]
-        }
-
-        let nsText = text as NSString
-        let matches = regex.matches(in: text, options: [], range: NSRange(location: 0, length: nsText.length))
-
-        var segments: [ShareableNoteSegment] = []
-        var lastEnd = 0
-
-        for match in matches {
-            let fullRange = match.range
-            if fullRange.location > lastEnd {
-                let between = nsText.substring(with: NSRange(location: lastEnd, length: fullRange.location - lastEnd))
-                if !between.isEmpty {
-                    segments.append(.text(between))
-                }
-            }
-
-            let uuidRange = match.range(at: 1)
-            let uuidString = nsText.substring(with: uuidRange)
-            if let uuid = UUID(uuidString: uuidString),
-               let ni = noteImages.first(where: { $0.id == uuid }),
-               let image = ImageStorage.loadImage(relativePath: ni.relativePath) {
-                segments.append(.image(image))
-            }
-
-            lastEnd = fullRange.location + fullRange.length
-        }
-
-        if lastEnd < nsText.length {
-            let remaining = nsText.substring(from: lastEnd)
-            if !remaining.isEmpty {
-                segments.append(.text(remaining))
-            }
-        }
-
-        return segments
-    }
-
-    @MainActor
-    @discardableResult
-    private func savePastedImage(_ image: NSImage) -> UUID? {
-        let targetID: UUID
-        if let existingID = topic?.id ?? loadedTopicID {
-            targetID = existingID
-        } else {
-            let newTopic = Topic(title: "", kind: .other)
-            modelContext.insert(newTopic)
-            loadedTopicID = newTopic.id
-            onPersistChange(newTopic.id)
-            targetID = newTopic.id
-        }
-
-        guard let jpegData = jpegDataForStorage(from: image) else { return nil }
-
-        let imageID = UUID()
-        do {
-            let relativePath = try ImageStorage.saveJPEG(data: jpegData, topicID: targetID, imageID: imageID)
-            let nextIndex = (noteImages.filter { $0.topicID == targetID }.map(\.sortIndex).max() ?? -1) + 1
-
-            let noteImage = NoteImage(
-                id: imageID,
-                topicID: targetID,
-                relativePath: relativePath,
-                fileName: "\(imageID.uuidString).jpg",
-                fileSize: jpegData.count,
-                width: image.size.width,
-                height: image.size.height,
-                sortIndex: nextIndex
-            )
-            modelContext.insert(noteImage)
-            try modelContext.save()
-            return imageID
-        } catch {
-            print("保存图片失败：\(error)")
-            return nil
-        }
-    }
-
-    @MainActor
-    private func deleteInlineImage(_ imageID: UUID) {
-        guard let noteImage = noteImages.first(where: { $0.id == imageID }) else { return }
-        ImageStorage.deleteImage(relativePath: noteImage.relativePath)
-        modelContext.delete(noteImage)
-        try? modelContext.save()
-    }
-
-    private func jpegDataForStorage(
-        from image: NSImage,
-        maxDimension: CGFloat = 2400,
-        maxBytes: Int = 4 * 1024 * 1024
-    ) -> Data? {
-        let resized: NSImage
-        if max(image.size.width, image.size.height) > maxDimension {
-            let scale = maxDimension / max(image.size.width, image.size.height)
-            let newSize = NSSize(width: image.size.width * scale, height: image.size.height * scale)
-            let tmp = NSImage(size: newSize)
-            tmp.lockFocus()
-            image.draw(in: NSRect(origin: .zero, size: newSize))
-            tmp.unlockFocus()
-            resized = tmp
-        } else {
-            resized = image
-        }
-
-        guard let tiffData = resized.tiffRepresentation,
-              let bitmap = NSBitmapImageRep(data: tiffData) else { return nil }
-
-        for quality: CGFloat in [0.85, 0.75, 0.65, 0.55, 0.45] {
-            if let data = bitmap.representation(using: .jpeg, properties: [.compressionFactor: quality]),
-               data.count <= maxBytes {
-                return data
-            }
-        }
-        return bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.3])
-    }
-
-    @MainActor
-    private func deleteImage(_ noteImage: NoteImage) {
-        ImageStorage.deleteImage(relativePath: noteImage.relativePath)
-        modelContext.delete(noteImage)
-        try? modelContext.save()
     }
 }
