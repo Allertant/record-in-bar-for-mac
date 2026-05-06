@@ -437,30 +437,155 @@ final class InterceptingTextView: NSTextView {
     override var isFlipped: Bool { true }
     var onImagePasted: ((NSImage) -> UUID?)?
     var onImageClicked: ((UUID) -> Void)?
+    private var previousAcceptsMouseMovedEvents: Bool?
+    private lazy var imageActionButton: NSButton = makeImageActionButton()
+    private var hoveredImageID: UUID?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.activeInKeyWindow, .mouseMoved, .mouseEnteredAndExited, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let window {
+            if previousAcceptsMouseMovedEvents == nil {
+                previousAcceptsMouseMovedEvents = window.acceptsMouseMovedEvents
+            }
+            window.acceptsMouseMovedEvents = true
+        }
+        ensureImageActionButton()
+    }
+
+    deinit {
+        if let window, let previousAcceptsMouseMovedEvents {
+            window.acceptsMouseMovedEvents = previousAcceptsMouseMovedEvents
+        }
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        updateImageHover(at: point)
+        super.mouseEntered(with: event)
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        updateImageHover(at: point)
+        super.mouseMoved(with: event)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        hideImageActionButton()
+        super.mouseExited(with: event)
+    }
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        let charIndex = characterIndexForInsertion(at: point)
-        print("[Click] point=\(point), charIndex=\(charIndex), storage length=\(textStorage?.length ?? -1)")
-        if let attachment = findImageAttachment(near: charIndex) {
-            print("[Click] found attachment: \(attachment.imageID), callback=\(onImageClicked == nil ? "nil" : "set")")
-            onImageClicked?(attachment.imageID)
+        if let hit = imageHit(at: point), hit.zoomBadgeRect.contains(point) {
+            onImageClicked?(hit.attachment.imageID)
             return
         }
         super.mouseDown(with: event)
     }
 
-    private func findImageAttachment(near index: Int) -> ImageTextAttachment? {
-        guard let storage = textStorage else { return nil }
-        let length = storage.length
-        for offset in 0...2 {
-            let i = index - offset
-            guard i >= 0, i < length else { continue }
-            if let attachment = storage.attribute(.attachment, at: i, effectiveRange: nil) as? ImageTextAttachment {
-                return attachment
-            }
+    private struct ImageHit {
+        let attachment: ImageTextAttachment
+        let attachmentRect: CGRect
+        let zoomBadgeRect: CGRect
+    }
+
+    private func ensureImageActionButton() {
+        guard imageActionButton.superview == nil else { return }
+        addSubview(imageActionButton)
+        imageActionButton.isHidden = true
+    }
+
+    private func makeImageActionButton() -> NSButton {
+        let button = NSButton(frame: .zero)
+        button.isBordered = false
+        button.bezelStyle = .regularSquare
+        button.imagePosition = .imageOnly
+        button.setButtonType(.momentaryChange)
+        button.wantsLayer = true
+        button.layer?.cornerRadius = 7
+        button.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.78).cgColor
+        button.layer?.borderWidth = 1
+        button.layer?.borderColor = NSColor.white.withAlphaComponent(0.2).cgColor
+        button.contentTintColor = .white
+        if let image = NSImage(systemSymbolName: "arrow.up.left.and.arrow.down.right", accessibilityDescription: "放大图片") {
+            let config = NSImage.SymbolConfiguration(pointSize: 11, weight: .semibold)
+            button.image = image.withSymbolConfiguration(config)
         }
-        return nil
+        button.target = self
+        button.action = #selector(handleImageActionButtonClick)
+        return button
+    }
+
+    @objc
+    private func handleImageActionButtonClick() {
+        guard let hoveredImageID else { return }
+        onImageClicked?(hoveredImageID)
+    }
+
+    private func updateImageHover(at point: CGPoint) {
+        ensureImageActionButton()
+        guard let hit = imageHit(at: point) else {
+            hideImageActionButton()
+            return
+        }
+
+        hoveredImageID = hit.attachment.imageID
+        imageActionButton.frame = hit.zoomBadgeRect
+        imageActionButton.isHidden = false
+        imageActionButton.needsDisplay = true
+    }
+
+    private func hideImageActionButton() {
+        hoveredImageID = nil
+        imageActionButton.isHidden = true
+    }
+
+    private func imageHit(at point: CGPoint) -> ImageHit? {
+        guard
+            let layoutManager,
+            let textContainer,
+            let storage = textStorage,
+            storage.length > 0
+        else { return nil }
+
+        let containerPoint = CGPoint(
+            x: point.x - textContainerOrigin.x,
+            y: point.y - textContainerOrigin.y
+        )
+        let glyphIndex = layoutManager.glyphIndex(for: containerPoint, in: textContainer)
+        let characterIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
+        guard characterIndex >= 0, characterIndex < storage.length else { return nil }
+
+        var effectiveRange = NSRange(location: 0, length: 0)
+        guard let attachment = storage.attribute(.attachment, at: characterIndex, effectiveRange: &effectiveRange) as? ImageTextAttachment else {
+            return nil
+        }
+
+        let glyphRange = layoutManager.glyphRange(forCharacterRange: effectiveRange, actualCharacterRange: nil)
+        var attachmentRect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
+        attachmentRect.origin.x += textContainerOrigin.x
+        attachmentRect.origin.y += textContainerOrigin.y
+
+        guard attachmentRect.contains(point) else { return nil }
+
+        return ImageHit(
+            attachment: attachment,
+            attachmentRect: attachmentRect,
+            zoomBadgeRect: attachment.zoomBadgeRect(in: attachmentRect)
+        )
     }
 
     override func setFrameSize(_ newSize: NSSize) {

@@ -31,6 +31,7 @@ struct EditorPageView: View {
     @State private var shareSuccessMessage = ""
     @State private var headerReferenceDate = Date()
     @State private var imagePreviewPanel: NSPanel?
+    @State private var imagePreviewTask: Task<Void, Never>?
     @State private var pendingPersistTask: Task<Void, Never>?
 
     var body: some View {
@@ -190,6 +191,8 @@ struct EditorPageView: View {
             loadDraftIfNeeded()
         }
         .onDisappear {
+            imagePreviewTask?.cancel()
+            imagePreviewTask = nil
             imagePreviewPanel?.close()
             imagePreviewPanel = nil
             flushDraftPersistence(existingTopicID: topic?.id)
@@ -871,42 +874,66 @@ extension EditorPageView {
 
     @MainActor
     private func openImagePreview(uuid: UUID) {
-        print("[Preview] openImagePreview uuid=\(uuid)")
         guard let ni = noteImages.first(where: { $0.id == uuid }) else {
-            print("[Preview] no NoteImage found")
             return
         }
-        guard let image = ImageStorage.loadImage(relativePath: ni.relativePath) else {
-            print("[Preview] image load failed, path=\(ni.relativePath)")
-            return
-        }
-        print("[Preview] image loaded, size=\(image.size)")
 
+        imagePreviewTask?.cancel()
         imagePreviewPanel?.close()
+        imagePreviewPanel = nil
 
-        let screen = NSScreen.main!.visibleFrame
-        let panelSize = NSSize(width: screen.width * 0.7, height: screen.height * 0.6)
-        print("[Preview] screen=\(screen), panelSize=\(panelSize)")
+        let relativePath = ni.relativePath
+        let targetScreen = imagePreviewScreen()
 
-        let panel = NSPanel(
-            contentRect: NSRect(origin: .zero, size: panelSize),
-            styleMask: [.titled, .closable, .resizable, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false
-        )
-        panel.title = "图片预览"
-        panel.level = .floating
-        panel.isReleasedWhenClosed = false
+        imagePreviewTask = Task.detached(priority: .userInitiated) {
+            let image = ImageStorage.loadImage(relativePath: relativePath)
+            guard !Task.isCancelled, let image else { return }
 
-        let hosting = NSHostingController(rootView: ImagePreviewView(image: image))
-        hosting.sizingOptions = []
-        panel.contentViewController = hosting
-        panel.setFrame(NSRect(origin: .zero, size: panelSize), display: true)
-        panel.center()
+            await MainActor.run {
+                let screenFrame = targetScreen?.visibleFrame ?? NSScreen.screens.first?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1200, height: 800)
+                let panelSize = NSSize(
+                    width: min(max(screenFrame.width * 0.72, 760), 1280),
+                    height: min(max(screenFrame.height * 0.72, 560), 960)
+                )
 
-        panel.orderFrontRegardless()
-        print("[Preview] panel ordered, isVisible=\(panel.isVisible), frame=\(panel.frame)")
-        imagePreviewPanel = panel
+                let panel = NSPanel(
+                    contentRect: NSRect(origin: .zero, size: panelSize),
+                    styleMask: [.titled, .closable, .resizable],
+                    backing: .buffered,
+                    defer: false
+                )
+                panel.title = "图片预览"
+                panel.level = .floating
+                panel.isReleasedWhenClosed = false
+                panel.collectionBehavior = [.fullScreenAuxiliary, .moveToActiveSpace]
+                panel.minSize = NSSize(width: 420, height: 320)
+
+                let hosting = NSHostingController(rootView: ImagePreviewView(image: image))
+                hosting.sizingOptions = []
+                panel.contentViewController = hosting
+                panel.setFrame(NSRect(origin: .zero, size: panelSize), display: true)
+                panel.center()
+
+                panel.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
+                imagePreviewPanel = panel
+                imagePreviewTask = nil
+            }
+        }
+    }
+
+    @MainActor
+    private func imagePreviewScreen() -> NSScreen? {
+        if let panel = imagePreviewPanel, let screen = panel.screen {
+            return screen
+        }
+        if let keyWindow = NSApp.keyWindow, let screen = keyWindow.screen {
+            return screen
+        }
+        if let mainWindow = NSApp.mainWindow, let screen = mainWindow.screen {
+            return screen
+        }
+        return NSScreen.main
     }
 
     @MainActor
@@ -929,13 +956,20 @@ private struct ImagePreviewView: View {
     var body: some View {
         GeometryReader { geo in
             ScrollView([.horizontal, .vertical]) {
+                let baseScale = min(
+                    geo.size.width / max(image.size.width, 1),
+                    geo.size.height / max(image.size.height, 1),
+                    1
+                )
+                let displayWidth = max(120, image.size.width * baseScale * totalScale)
+                let displayHeight = max(120, image.size.height * baseScale * totalScale)
+
                 Image(nsImage: image)
                     .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(
-                        width: geo.size.width * totalScale,
-                        height: geo.size.height * totalScale
-                    )
+                    .interpolation(.high)
+                    .frame(width: displayWidth, height: displayHeight)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                    .padding(24)
                     .gesture(
                         MagnifyGesture()
                             .updating($pinchScale) { value, state, _ in
@@ -946,6 +980,7 @@ private struct ImagePreviewView: View {
                             }
                     )
             }
+            .background(Color(nsColor: .windowBackgroundColor))
         }
     }
 }

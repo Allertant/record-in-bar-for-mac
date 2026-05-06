@@ -6,12 +6,15 @@ extension NSAttributedString.Key {
 
 final class ImageTextAttachment: NSTextAttachment {
     private static let preferredDisplayWidth: CGFloat = 280
+    private static let zoomBadgeSize = NSSize(width: 24, height: 24)
+    private static let zoomBadgeInset: CGFloat = 8
     let imageID: UUID
 
     init(image: NSImage, imageID: UUID) {
         self.imageID = imageID
         super.init(data: nil, ofType: nil)
         self.image = image
+        attachmentCell = ImageAttachmentCell(textCell: "")
     }
 
     required init?(coder: NSCoder) {
@@ -19,6 +22,7 @@ final class ImageTextAttachment: NSTextAttachment {
               let uuid = UUID(uuidString: uuidString) else { return nil }
         self.imageID = uuid
         super.init(coder: coder)
+        attachmentCell = ImageAttachmentCell(textCell: "")
     }
 
     override func encode(with coder: NSCoder) {
@@ -43,5 +47,23 @@ final class ImageTextAttachment: NSTextAttachment {
         let displayWidth = min(maxWidth, image.size.width)
         let displayHeight = displayWidth / aspectRatio
         return CGRect(x: 0, y: 0, width: displayWidth, height: displayHeight)
+    }
+
+    func zoomBadgeRect(in attachmentRect: CGRect) -> CGRect {
+        CGRect(
+            x: attachmentRect.maxX - Self.zoomBadgeInset - Self.zoomBadgeSize.width,
+            y: attachmentRect.minY + Self.zoomBadgeInset,
+            width: Self.zoomBadgeSize.width,
+            height: Self.zoomBadgeSize.height
+        )
+    }
+}
+
+private final class ImageAttachmentCell: NSTextAttachmentCell {
+    override func draw(
+        withFrame cellFrame: NSRect,
+        in controlView: NSView?
+    ) {
+        super.draw(withFrame: cellFrame, in: controlView)
     }
 }
