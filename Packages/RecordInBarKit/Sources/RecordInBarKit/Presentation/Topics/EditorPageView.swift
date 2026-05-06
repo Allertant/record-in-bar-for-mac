@@ -29,9 +29,8 @@ struct EditorPageView: View {
     @State private var isGeneratingImage = false
     @State private var showShareSuccess = false
     @State private var shareSuccessMessage = ""
-    @State private var previewImage: NSImage?
-    @State private var showImagePreview = false
     @State private var headerReferenceDate = Date()
+    @State private var imagePreviewPanel: NSPanel?
     @State private var pendingPersistTask: Task<Void, Never>?
 
     var body: some View {
@@ -191,6 +190,8 @@ struct EditorPageView: View {
             loadDraftIfNeeded()
         }
         .onDisappear {
+            imagePreviewPanel?.close()
+            imagePreviewPanel = nil
             flushDraftPersistence(existingTopicID: topic?.id)
         }
         .overlay { modalOverlay }
@@ -200,7 +201,7 @@ struct EditorPageView: View {
     // MARK: - Single always-present modal overlay
 
     private var hasActiveModal: Bool {
-        showShareSheet || showDeleteConfirmation || showImagePreview
+        showShareSheet || showDeleteConfirmation
     }
 
     @ViewBuilder
@@ -229,9 +230,6 @@ struct EditorPageView: View {
             )
             .background(.regularMaterial)
             .opacity(showDeleteConfirmation ? 1 : 0)
-
-            imagePreviewPanel
-                .opacity(showImagePreview ? 1 : 0)
         }
         .allowsHitTesting(hasActiveModal)
         .animation(.spring(response: 0.3, dampingFraction: 0.85), value: hasActiveModal)
@@ -240,7 +238,6 @@ struct EditorPageView: View {
     private func dismissAllModals() {
         showShareSheet = false
         showDeleteConfirmation = false
-        showImagePreview = false
     }
 
     @ViewBuilder
@@ -327,60 +324,6 @@ struct EditorPageView: View {
     }
 
     @ViewBuilder
-    private var imagePreviewPanel: some View {
-        if let nsImage = previewImage {
-            GeometryReader { geo in
-                let available = geo.size
-                let imgAspect = nsImage.size.width / nsImage.size.height
-                let displayWidth = min(available.width - 32, nsImage.size.width)
-                let displayHeight = displayWidth / imgAspect
-                let needsScroll = displayHeight > available.height - 32
-
-                if needsScroll {
-                    ScrollView {
-                        VStack(spacing: 12) {
-                            Image(nsImage: nsImage)
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: displayWidth)
-                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-                            Button("关闭预览") { closeImagePreview() }
-                                .buttonStyle(.plain)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 8)
-                                .background(Color.black.opacity(0.6))
-                                .clipShape(Capsule())
-                        }
-                        .padding(.vertical, 16)
-                        .frame(maxWidth: .infinity)
-                    }
-                } else {
-                    VStack(spacing: 12) {
-                        Image(nsImage: nsImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: displayWidth)
-                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-                        Button("关闭预览") { closeImagePreview() }
-                            .buttonStyle(.plain)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(Color.black.opacity(0.6))
-                            .clipShape(Capsule())
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
     private var toastOverlay: some View {
         if showShareSuccess {
             Text(shareSuccessMessage)
@@ -428,6 +371,9 @@ struct EditorPageView: View {
                     },
                     onImageDeleted: { uuid in
                         deleteInlineImage(uuid)
+                    },
+                    onImageClicked: { uuid in
+                        openImagePreview(uuid: uuid)
                     }
                 )
 
@@ -598,17 +544,9 @@ struct EditorPageView: View {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                 showShareSheet = false
                 isGeneratingImage = false
-                previewImage = nsImage
-                showImagePreview = true
             }
+            showShareSuccessToast(message: "图片复制成功")
         }
-    }
-
-    @MainActor
-    private func closeImagePreview() {
-        showImagePreview = false
-        previewImage = nil
-        showShareSuccessToast(message: "图片复制成功")
     }
 
     @MainActor
@@ -932,9 +870,82 @@ extension EditorPageView {
     }
 
     @MainActor
+    private func openImagePreview(uuid: UUID) {
+        print("[Preview] openImagePreview uuid=\(uuid)")
+        guard let ni = noteImages.first(where: { $0.id == uuid }) else {
+            print("[Preview] no NoteImage found")
+            return
+        }
+        guard let image = ImageStorage.loadImage(relativePath: ni.relativePath) else {
+            print("[Preview] image load failed, path=\(ni.relativePath)")
+            return
+        }
+        print("[Preview] image loaded, size=\(image.size)")
+
+        imagePreviewPanel?.close()
+
+        let screen = NSScreen.main!.visibleFrame
+        let panelSize = NSSize(width: screen.width * 0.7, height: screen.height * 0.6)
+        print("[Preview] screen=\(screen), panelSize=\(panelSize)")
+
+        let panel = NSPanel(
+            contentRect: NSRect(origin: .zero, size: panelSize),
+            styleMask: [.titled, .closable, .resizable, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.title = "图片预览"
+        panel.level = .floating
+        panel.isReleasedWhenClosed = false
+
+        let hosting = NSHostingController(rootView: ImagePreviewView(image: image))
+        hosting.sizingOptions = []
+        panel.contentViewController = hosting
+        panel.setFrame(NSRect(origin: .zero, size: panelSize), display: true)
+        panel.center()
+
+        panel.orderFrontRegardless()
+        print("[Preview] panel ordered, isVisible=\(panel.isVisible), frame=\(panel.frame)")
+        imagePreviewPanel = panel
+    }
+
+    @MainActor
     private func deleteImage(_ noteImage: NoteImage) {
         ImageStorage.deleteImage(relativePath: noteImage.relativePath)
         modelContext.delete(noteImage)
         try? modelContext.save()
+    }
+}
+
+private struct ImagePreviewView: View {
+    let image: NSImage
+    @State private var currentScale: CGFloat = 1.0
+    @GestureState private var pinchScale: CGFloat = 1.0
+
+    private var totalScale: CGFloat {
+        max(0.3, min(currentScale * pinchScale, 8.0))
+    }
+
+    var body: some View {
+        GeometryReader { geo in
+            ScrollView([.horizontal, .vertical]) {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(
+                        width: geo.size.width * totalScale,
+                        height: geo.size.height * totalScale
+                    )
+                    .gesture(
+                        MagnifyGesture()
+                            .updating($pinchScale) { value, state, _ in
+                                state = value.magnification
+                            }
+                            .onEnded { value in
+                                currentScale = max(0.3, min(currentScale * value.magnification, 8.0))
+                            }
+                    )
+            }
+        }
     }
 }

@@ -10,6 +10,7 @@ struct RichTextEditor: NSViewRepresentable {
     var onImagePasted: ((NSImage) -> UUID?)?
     var imageLoader: (UUID) -> NSImage?
     var onImageDeleted: ((UUID) -> Void)?
+    var onImageClicked: ((UUID) -> Void)?
 
     init(
         text: Binding<String>,
@@ -19,7 +20,8 @@ struct RichTextEditor: NSViewRepresentable {
         verticalPadding: CGFloat = 6,
         onImagePasted: ((NSImage) -> UUID?)? = nil,
         imageLoader: @escaping (UUID) -> NSImage? = { _ in nil },
-        onImageDeleted: ((UUID) -> Void)? = nil
+        onImageDeleted: ((UUID) -> Void)? = nil,
+        onImageClicked: ((UUID) -> Void)? = nil
     ) {
         self._text = text
         self.minHeight = minHeight
@@ -29,10 +31,11 @@ struct RichTextEditor: NSViewRepresentable {
         self.onImagePasted = onImagePasted
         self.imageLoader = imageLoader
         self.onImageDeleted = onImageDeleted
+        self.onImageClicked = onImageClicked
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text, font: font, verticalPadding: verticalPadding, imageLoader: imageLoader, onImageDeleted: onImageDeleted)
+        Coordinator(text: $text, font: font, verticalPadding: verticalPadding, imageLoader: imageLoader, onImageDeleted: onImageDeleted, onImageClicked: onImageClicked)
     }
 
     func makeNSView(context: Context) -> InterceptingTextView {
@@ -59,14 +62,17 @@ struct RichTextEditor: NSViewRepresentable {
         configure(textView, coordinator: context.coordinator)
         context.coordinator.applyExternalText(text, to: textView, preserveSelection: false)
         textView.onImagePasted = onImagePasted
+        textView.onImageClicked = onImageClicked
         return textView
     }
 
     func updateNSView(_ textView: InterceptingTextView, context: Context) {
         configure(textView, coordinator: context.coordinator)
         textView.onImagePasted = onImagePasted
+        textView.onImageClicked = onImageClicked
         context.coordinator.imageLoader = imageLoader
         context.coordinator.onImageDeleted = onImageDeleted
+        context.coordinator.onImageClicked = onImageClicked
 
         let currentMarkerText = Self.Coordinator.stringWithImageMarkers(from: textView)
         if currentMarkerText != text,
@@ -139,14 +145,16 @@ struct RichTextEditor: NSViewRepresentable {
         private var heightInvalidated = false
         var imageLoader: (UUID) -> NSImage?
         var onImageDeleted: ((UUID) -> Void)?
+        var onImageClicked: ((UUID) -> Void)?
         private var previousAttachmentIDs: Set<UUID> = []
 
-        init(text: Binding<String>, font: NSFont, verticalPadding: CGFloat, imageLoader: @escaping (UUID) -> NSImage?, onImageDeleted: ((UUID) -> Void)?) {
+        init(text: Binding<String>, font: NSFont, verticalPadding: CGFloat, imageLoader: @escaping (UUID) -> NSImage?, onImageDeleted: ((UUID) -> Void)?, onImageClicked: ((UUID) -> Void)?) {
             self._text = text
             self.font = font
             self.verticalPadding = verticalPadding
             self.imageLoader = imageLoader
             self.onImageDeleted = onImageDeleted
+            self.onImageClicked = onImageClicked
         }
 
         func textDidBeginEditing(_ notification: Notification) {
@@ -362,7 +370,7 @@ struct RichTextEditor: NSViewRepresentable {
                     let imageAttrs: [NSAttributedString.Key: Any] = [
                         .paragraphStyle: RichTextEditor.imageParagraphStyle()
                     ]
-                    var attachmentString = NSAttributedString(attachment: attachment)
+                    let attachmentString = NSAttributedString(attachment: attachment)
                     let mutable = NSMutableAttributedString(attributedString: attachmentString)
                     mutable.addAttributes(imageAttrs, range: NSRange(location: 0, length: mutable.length))
                     result.append(mutable)
@@ -428,6 +436,32 @@ struct RichTextEditor: NSViewRepresentable {
 final class InterceptingTextView: NSTextView {
     override var isFlipped: Bool { true }
     var onImagePasted: ((NSImage) -> UUID?)?
+    var onImageClicked: ((UUID) -> Void)?
+
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        let charIndex = characterIndexForInsertion(at: point)
+        print("[Click] point=\(point), charIndex=\(charIndex), storage length=\(textStorage?.length ?? -1)")
+        if let attachment = findImageAttachment(near: charIndex) {
+            print("[Click] found attachment: \(attachment.imageID), callback=\(onImageClicked == nil ? "nil" : "set")")
+            onImageClicked?(attachment.imageID)
+            return
+        }
+        super.mouseDown(with: event)
+    }
+
+    private func findImageAttachment(near index: Int) -> ImageTextAttachment? {
+        guard let storage = textStorage else { return nil }
+        let length = storage.length
+        for offset in 0...2 {
+            let i = index - offset
+            guard i >= 0, i < length else { continue }
+            if let attachment = storage.attribute(.attachment, at: i, effectiveRange: nil) as? ImageTextAttachment {
+                return attachment
+            }
+        }
+        return nil
+    }
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
