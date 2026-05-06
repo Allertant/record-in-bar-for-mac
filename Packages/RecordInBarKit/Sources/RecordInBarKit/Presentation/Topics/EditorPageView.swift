@@ -9,7 +9,7 @@ struct EditorPageView: View {
     @Query(sort: \AISummary.createdAt, order: .reverse) private var summaries: [AISummary]
     @Query private var allNotes: [NoteItem]
     @Query private var allSummaries: [AISummary]
-    @Query(sort: \NoteImage.createdAt) private var noteImages: [NoteImage]
+    @Query(sort: \NoteImage.createdAt) var noteImages: [NoteImage]
     @Query private var appSettings: [AppSettings]
 
     @ObservedObject private var pinManager = PopoverPinManager.shared
@@ -22,7 +22,7 @@ struct EditorPageView: View {
 
     @State private var showDeleteConfirmation = false
     @State private var draftTitle = ""
-    @State private var draftNote = ""
+    @State var draftNote = ""
     @State private var loadedTopicID: UUID?
     @State private var showCopiedToast = false
     @State private var showShareSheet = false
@@ -30,11 +30,11 @@ struct EditorPageView: View {
     @State private var showShareSuccess = false
     @State private var shareSuccessMessage = ""
     @State private var headerReferenceDate = Date()
-    @State private var imagePreviewPanel: NSPanel?
-    @State private var imagePreviewParentWindowNumber: Int?
-    @State private var currentPreviewImageID: UUID?
-    @State private var imagePreviewState = ImagePreviewState()
-    @State private var imagePreviewTask: Task<Void, Never>?
+    @State var imagePreviewPanel: NSPanel?
+    @State var imagePreviewParentWindowNumber: Int?
+    @State var currentPreviewImageID: UUID?
+    @State var imagePreviewState = ImagePreviewState()
+    @State var imagePreviewTask: Task<Void, Never>?
     @State private var pendingPersistTask: Task<Void, Never>?
 
     var body: some View {
@@ -875,279 +875,9 @@ extension EditorPageView {
     }
 
     @MainActor
-    private func openImagePreview(uuid: UUID) {
-        guard let ni = noteImages.first(where: { $0.id == uuid }) else {
-            return
-        }
-
-        imagePreviewTask?.cancel()
-        let relativePath = ni.relativePath
-        let targetScreen = imagePreviewScreen()
-        let parentWindow = NSApp.keyWindow ?? NSApp.mainWindow
-        let existingPanel = imagePreviewPanel
-        let previousPanelSize = existingPanel?.frame.size
-
-        imagePreviewTask = Task.detached(priority: .userInitiated) {
-            let image = ImageStorage.loadImage(relativePath: relativePath)
-            guard !Task.isCancelled, let image else { return }
-
-            await MainActor.run {
-                currentPreviewImageID = uuid
-                imagePreviewState.update(
-                    image: image,
-                    canGoPrevious: previousPreviewImageID(for: uuid) != nil,
-                    canGoNext: nextPreviewImageID(for: uuid) != nil,
-                    onPrevious: {
-                        guard let previousID = previousPreviewImageID(for: uuid) else { return }
-                        openImagePreview(uuid: previousID)
-                    },
-                    onNext: {
-                        guard let nextID = nextPreviewImageID(for: uuid) else { return }
-                        openImagePreview(uuid: nextID)
-                    }
-                )
-
-                if let panel = existingPanel {
-                    panel.orderFront(nil)
-                } else {
-                    let screenFrame = targetScreen?.visibleFrame ?? NSScreen.screens.first?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1200, height: 800)
-                    let panelSize = previousPanelSize ?? NSSize(
-                        width: min(max(screenFrame.width * 0.72, 760), 1280),
-                        height: min(max(screenFrame.height * 0.72, 560), 960)
-                    )
-                    let centeredOrigin = NSPoint(
-                        x: screenFrame.midX - panelSize.width / 2,
-                        y: screenFrame.midY - panelSize.height / 2
-                    )
-
-                    let panel = NSPanel(
-                        contentRect: NSRect(origin: .zero, size: panelSize),
-                        styleMask: [.titled, .closable, .resizable, .nonactivatingPanel],
-                        backing: .buffered,
-                        defer: false
-                    )
-                    panel.title = "图片预览"
-                    panel.level = .floating
-                    panel.isFloatingPanel = true
-                    panel.isReleasedWhenClosed = false
-                    panel.becomesKeyOnlyIfNeeded = true
-                    panel.hidesOnDeactivate = false
-                    panel.worksWhenModal = true
-                    panel.collectionBehavior = [.fullScreenAuxiliary, .moveToActiveSpace]
-                    panel.minSize = NSSize(width: 420, height: 320)
-
-                    let hosting = NSHostingController(rootView: ImagePreviewView(state: imagePreviewState))
-                    hosting.sizingOptions = []
-                    panel.contentViewController = hosting
-                    panel.setFrame(NSRect(origin: centeredOrigin, size: panelSize), display: true)
-
-                    if let parentWindow {
-                        parentWindow.addChildWindow(panel, ordered: .above)
-                        imagePreviewParentWindowNumber = parentWindow.windowNumber
-                        panel.orderFront(nil)
-                    } else {
-                        panel.orderFrontRegardless()
-                        imagePreviewParentWindowNumber = nil
-                    }
-
-                    imagePreviewPanel = panel
-                }
-                imagePreviewTask = nil
-            }
-        }
-    }
-
-    @MainActor
-    private func closeImagePreviewPanel() {
-        if let panel = imagePreviewPanel {
-            if let parent = panel.parent {
-                parent.removeChildWindow(panel)
-            } else if let parentWindowNumber = imagePreviewParentWindowNumber,
-                      let parent = NSApp.windows.first(where: { $0.windowNumber == parentWindowNumber }) {
-                parent.removeChildWindow(panel)
-            }
-            panel.close()
-        }
-        imagePreviewPanel = nil
-        imagePreviewParentWindowNumber = nil
-        currentPreviewImageID = nil
-    }
-
-    @MainActor
-    private func imagePreviewScreen() -> NSScreen? {
-        if let panel = imagePreviewPanel, let screen = panel.screen {
-            return screen
-        }
-        if let keyWindow = NSApp.keyWindow, let screen = keyWindow.screen {
-            return screen
-        }
-        if let mainWindow = NSApp.mainWindow, let screen = mainWindow.screen {
-            return screen
-        }
-        return NSScreen.main
-    }
-
-    private var previewImagesForCurrentTopic: [NoteImage] {
-        let orderedIDs = previewImageIDsInDraftOrder
-        guard !orderedIDs.isEmpty else { return [] }
-
-        let imagesByID = Dictionary(uniqueKeysWithValues: noteImages.map { ($0.id, $0) })
-        return orderedIDs.compactMap { imagesByID[$0] }
-    }
-
-    private var previewImageIDsInDraftOrder: [UUID] {
-        let pattern = #"\[IMG:([0-9A-Fa-f\-]+)\]"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
-
-        let range = NSRange(draftNote.startIndex..., in: draftNote)
-        let matches = regex.matches(in: draftNote, range: range)
-        return matches.compactMap { match in
-            guard let uuidRange = Range(match.range(at: 1), in: draftNote) else { return nil }
-            return UUID(uuidString: String(draftNote[uuidRange]))
-        }
-    }
-
-    private func previousPreviewImageID(for imageID: UUID) -> UUID? {
-        guard let index = previewImagesForCurrentTopic.firstIndex(where: { $0.id == imageID }), index > 0 else {
-            return nil
-        }
-        return previewImagesForCurrentTopic[index - 1].id
-    }
-
-    private func nextPreviewImageID(for imageID: UUID) -> UUID? {
-        guard let index = previewImagesForCurrentTopic.firstIndex(where: { $0.id == imageID }) else {
-            return nil
-        }
-        let nextIndex = index + 1
-        guard previewImagesForCurrentTopic.indices.contains(nextIndex) else { return nil }
-        return previewImagesForCurrentTopic[nextIndex].id
-    }
-
-    @MainActor
     private func deleteImage(_ noteImage: NoteImage) {
         ImageStorage.deleteImage(relativePath: noteImage.relativePath)
         modelContext.delete(noteImage)
         try? modelContext.save()
-    }
-}
-
-private struct ImagePreviewView: View {
-    @ObservedObject var state: ImagePreviewState
-    @State private var currentScale: CGFloat = 1.0
-    @State private var isHoveringImage = false
-    @GestureState private var pinchScale: CGFloat = 1.0
-
-    private var totalScale: CGFloat {
-        max(0.3, min(currentScale * pinchScale, 8.0))
-    }
-
-    var body: some View {
-        GeometryReader { geo in
-            ScrollView([.horizontal, .vertical]) {
-                let baseScale = min(
-                    geo.size.width / max(state.image.size.width, 1),
-                    geo.size.height / max(state.image.size.height, 1),
-                    1
-                )
-                let displayWidth = max(120, state.image.size.width * baseScale * totalScale)
-                let displayHeight = max(120, state.image.size.height * baseScale * totalScale)
-
-                Image(nsImage: state.image)
-                    .resizable()
-                    .interpolation(.high)
-                    .frame(width: displayWidth, height: displayHeight)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                    .padding(24)
-                    .gesture(
-                        MagnifyGesture()
-                            .updating($pinchScale) { value, state, _ in
-                                state = value.magnification
-                            }
-                            .onEnded { value in
-                                currentScale = max(0.3, min(currentScale * value.magnification, 8.0))
-                            }
-                    )
-                    .overlay(alignment: .leading) {
-                        previewNavButton(
-                            systemName: "chevron.backward",
-                            isVisible: isHoveringImage,
-                            isEnabled: state.canGoPrevious,
-                            action: state.onPrevious
-                        )
-                        .padding(.leading, 20)
-                    }
-                    .overlay(alignment: .trailing) {
-                        previewNavButton(
-                            systemName: "chevron.forward",
-                            isVisible: isHoveringImage,
-                            isEnabled: state.canGoNext,
-                            action: state.onNext
-                        )
-                        .padding(.trailing, 20)
-                    }
-                    .onContinuousHover { phase in
-                        switch phase {
-                        case .active:
-                            withAnimation(.easeOut(duration: 0.16)) {
-                                isHoveringImage = true
-                            }
-                        case .ended:
-                            withAnimation(.easeIn(duration: 0.18)) {
-                                isHoveringImage = false
-                            }
-                        }
-                    }
-            }
-            .background(Color(nsColor: .windowBackgroundColor))
-        }
-    }
-
-    @ViewBuilder
-    private func previewNavButton(
-        systemName: String,
-        isVisible: Bool,
-        isEnabled: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(isEnabled ? Color.primary : Color.secondary.opacity(0.45))
-                .frame(width: 46, height: 46)
-                .background(Color(nsColor: .controlBackgroundColor).opacity(0.88))
-                .overlay(
-                    Circle()
-                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-                )
-                .clipShape(Circle())
-                .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 4)
-        }
-        .buttonStyle(.plain)
-        .disabled(!isEnabled)
-        .opacity(isVisible ? 1 : 0)
-        .allowsHitTesting(isVisible && isEnabled)
-    }
-}
-
-@MainActor
-private final class ImagePreviewState: ObservableObject {
-    @Published var image: NSImage = NSImage(size: NSSize(width: 1, height: 1))
-    @Published var canGoPrevious = false
-    @Published var canGoNext = false
-    var onPrevious: () -> Void = {}
-    var onNext: () -> Void = {}
-
-    func update(
-        image: NSImage,
-        canGoPrevious: Bool,
-        canGoNext: Bool,
-        onPrevious: @escaping () -> Void,
-        onNext: @escaping () -> Void
-    ) {
-        self.image = image
-        self.canGoPrevious = canGoPrevious
-        self.canGoNext = canGoNext
-        self.onPrevious = onPrevious
-        self.onNext = onNext
     }
 }
