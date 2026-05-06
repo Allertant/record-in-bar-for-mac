@@ -33,6 +33,7 @@ struct EditorPageView: View {
     @State private var imagePreviewPanel: NSPanel?
     @State private var imagePreviewParentWindowNumber: Int?
     @State private var currentPreviewImageID: UUID?
+    @State private var imagePreviewState = ImagePreviewState()
     @State private var imagePreviewTask: Task<Void, Never>?
     @State private var pendingPersistTask: Task<Void, Never>?
 
@@ -880,12 +881,11 @@ extension EditorPageView {
         }
 
         imagePreviewTask?.cancel()
-        let previousPanelSize = imagePreviewPanel?.frame.size
-        closeImagePreviewPanel()
-
         let relativePath = ni.relativePath
         let targetScreen = imagePreviewScreen()
         let parentWindow = NSApp.keyWindow ?? NSApp.mainWindow
+        let existingPanel = imagePreviewPanel
+        let previousPanelSize = existingPanel?.frame.size
 
         imagePreviewTask = Task.detached(priority: .userInitiated) {
             let image = ImageStorage.loadImage(relativePath: relativePath)
@@ -893,61 +893,65 @@ extension EditorPageView {
 
             await MainActor.run {
                 currentPreviewImageID = uuid
-                let screenFrame = targetScreen?.visibleFrame ?? NSScreen.screens.first?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1200, height: 800)
-                let panelSize = previousPanelSize ?? NSSize(
-                    width: min(max(screenFrame.width * 0.72, 760), 1280),
-                    height: min(max(screenFrame.height * 0.72, 560), 960)
-                )
-                let centeredOrigin = NSPoint(
-                    x: screenFrame.midX - panelSize.width / 2,
-                    y: screenFrame.midY - panelSize.height / 2
+                imagePreviewState.update(
+                    image: image,
+                    canGoPrevious: previousPreviewImageID(for: uuid) != nil,
+                    canGoNext: nextPreviewImageID(for: uuid) != nil,
+                    onPrevious: {
+                        guard let previousID = previousPreviewImageID(for: uuid) else { return }
+                        openImagePreview(uuid: previousID)
+                    },
+                    onNext: {
+                        guard let nextID = nextPreviewImageID(for: uuid) else { return }
+                        openImagePreview(uuid: nextID)
+                    }
                 )
 
-                let panel = NSPanel(
-                    contentRect: NSRect(origin: .zero, size: panelSize),
-                    styleMask: [.titled, .closable, .resizable, .nonactivatingPanel],
-                    backing: .buffered,
-                    defer: false
-                )
-                panel.title = "图片预览"
-                panel.level = .floating
-                panel.isFloatingPanel = true
-                panel.isReleasedWhenClosed = false
-                panel.becomesKeyOnlyIfNeeded = true
-                panel.hidesOnDeactivate = false
-                panel.worksWhenModal = true
-                panel.collectionBehavior = [.fullScreenAuxiliary, .moveToActiveSpace]
-                panel.minSize = NSSize(width: 420, height: 320)
-
-                let hosting = NSHostingController(
-                    rootView: ImagePreviewView(
-                        image: image,
-                        canGoPrevious: previousPreviewImageID(for: uuid) != nil,
-                        canGoNext: nextPreviewImageID(for: uuid) != nil,
-                        onPrevious: {
-                            guard let previousID = previousPreviewImageID(for: uuid) else { return }
-                            openImagePreview(uuid: previousID)
-                        },
-                        onNext: {
-                            guard let nextID = nextPreviewImageID(for: uuid) else { return }
-                            openImagePreview(uuid: nextID)
-                        }
-                    )
-                )
-                hosting.sizingOptions = []
-                panel.contentViewController = hosting
-                panel.setFrame(NSRect(origin: centeredOrigin, size: panelSize), display: true)
-
-                if let parentWindow {
-                    parentWindow.addChildWindow(panel, ordered: .above)
-                    imagePreviewParentWindowNumber = parentWindow.windowNumber
+                if let panel = existingPanel {
                     panel.orderFront(nil)
                 } else {
-                    panel.orderFrontRegardless()
-                    imagePreviewParentWindowNumber = nil
-                }
+                    let screenFrame = targetScreen?.visibleFrame ?? NSScreen.screens.first?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1200, height: 800)
+                    let panelSize = previousPanelSize ?? NSSize(
+                        width: min(max(screenFrame.width * 0.72, 760), 1280),
+                        height: min(max(screenFrame.height * 0.72, 560), 960)
+                    )
+                    let centeredOrigin = NSPoint(
+                        x: screenFrame.midX - panelSize.width / 2,
+                        y: screenFrame.midY - panelSize.height / 2
+                    )
 
-                imagePreviewPanel = panel
+                    let panel = NSPanel(
+                        contentRect: NSRect(origin: .zero, size: panelSize),
+                        styleMask: [.titled, .closable, .resizable, .nonactivatingPanel],
+                        backing: .buffered,
+                        defer: false
+                    )
+                    panel.title = "图片预览"
+                    panel.level = .floating
+                    panel.isFloatingPanel = true
+                    panel.isReleasedWhenClosed = false
+                    panel.becomesKeyOnlyIfNeeded = true
+                    panel.hidesOnDeactivate = false
+                    panel.worksWhenModal = true
+                    panel.collectionBehavior = [.fullScreenAuxiliary, .moveToActiveSpace]
+                    panel.minSize = NSSize(width: 420, height: 320)
+
+                    let hosting = NSHostingController(rootView: ImagePreviewView(state: imagePreviewState))
+                    hosting.sizingOptions = []
+                    panel.contentViewController = hosting
+                    panel.setFrame(NSRect(origin: centeredOrigin, size: panelSize), display: true)
+
+                    if let parentWindow {
+                        parentWindow.addChildWindow(panel, ordered: .above)
+                        imagePreviewParentWindowNumber = parentWindow.windowNumber
+                        panel.orderFront(nil)
+                    } else {
+                        panel.orderFrontRegardless()
+                        imagePreviewParentWindowNumber = nil
+                    }
+
+                    imagePreviewPanel = panel
+                }
                 imagePreviewTask = nil
             }
         }
@@ -1020,11 +1024,7 @@ extension EditorPageView {
 }
 
 private struct ImagePreviewView: View {
-    let image: NSImage
-    let canGoPrevious: Bool
-    let canGoNext: Bool
-    let onPrevious: () -> Void
-    let onNext: () -> Void
+    @ObservedObject var state: ImagePreviewState
     @State private var currentScale: CGFloat = 1.0
     @GestureState private var pinchScale: CGFloat = 1.0
 
@@ -1036,15 +1036,15 @@ private struct ImagePreviewView: View {
         GeometryReader { geo in
             VStack(spacing: 0) {
                 HStack(spacing: 10) {
-                    Button("上一张", action: onPrevious)
+                    Button("上一张", action: state.onPrevious)
                         .buttonStyle(.bordered)
-                        .disabled(!canGoPrevious)
+                        .disabled(!state.canGoPrevious)
 
                     Spacer()
 
-                    Button("下一张", action: onNext)
+                    Button("下一张", action: state.onNext)
                         .buttonStyle(.bordered)
-                        .disabled(!canGoNext)
+                        .disabled(!state.canGoNext)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
@@ -1054,14 +1054,14 @@ private struct ImagePreviewView: View {
 
                 ScrollView([.horizontal, .vertical]) {
                     let baseScale = min(
-                        geo.size.width / max(image.size.width, 1),
-                        geo.size.height / max(image.size.height, 1),
+                        geo.size.width / max(state.image.size.width, 1),
+                        geo.size.height / max(state.image.size.height, 1),
                         1
                     )
-                    let displayWidth = max(120, image.size.width * baseScale * totalScale)
-                    let displayHeight = max(120, image.size.height * baseScale * totalScale)
+                    let displayWidth = max(120, state.image.size.width * baseScale * totalScale)
+                    let displayHeight = max(120, state.image.size.height * baseScale * totalScale)
 
-                    Image(nsImage: image)
+                    Image(nsImage: state.image)
                         .resizable()
                         .interpolation(.high)
                         .frame(width: displayWidth, height: displayHeight)
@@ -1080,5 +1080,28 @@ private struct ImagePreviewView: View {
                 .background(Color(nsColor: .windowBackgroundColor))
             }
         }
+    }
+}
+
+@MainActor
+private final class ImagePreviewState: ObservableObject {
+    @Published var image: NSImage = NSImage(size: NSSize(width: 1, height: 1))
+    @Published var canGoPrevious = false
+    @Published var canGoNext = false
+    var onPrevious: () -> Void = {}
+    var onNext: () -> Void = {}
+
+    func update(
+        image: NSImage,
+        canGoPrevious: Bool,
+        canGoNext: Bool,
+        onPrevious: @escaping () -> Void,
+        onNext: @escaping () -> Void
+    ) {
+        self.image = image
+        self.canGoPrevious = canGoPrevious
+        self.canGoNext = canGoNext
+        self.onPrevious = onPrevious
+        self.onNext = onNext
     }
 }
