@@ -879,6 +879,7 @@ extension EditorPageView {
         }
 
         imagePreviewTask?.cancel()
+        let previousPanelSize = imagePreviewPanel?.frame.size
         closeImagePreviewPanel()
 
         let relativePath = ni.relativePath
@@ -891,9 +892,13 @@ extension EditorPageView {
 
             await MainActor.run {
                 let screenFrame = targetScreen?.visibleFrame ?? NSScreen.screens.first?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1200, height: 800)
-                let panelSize = NSSize(
+                let panelSize = previousPanelSize ?? NSSize(
                     width: min(max(screenFrame.width * 0.72, 760), 1280),
                     height: min(max(screenFrame.height * 0.72, 560), 960)
+                )
+                let centeredOrigin = NSPoint(
+                    x: screenFrame.midX - panelSize.width / 2,
+                    y: screenFrame.midY - panelSize.height / 2
                 )
 
                 let panel = NSPanel(
@@ -915,20 +920,13 @@ extension EditorPageView {
                 let hosting = NSHostingController(rootView: ImagePreviewView(image: image))
                 hosting.sizingOptions = []
                 panel.contentViewController = hosting
-                panel.setFrame(NSRect(origin: .zero, size: panelSize), display: true)
+                panel.setFrame(NSRect(origin: centeredOrigin, size: panelSize), display: true)
 
                 if let parentWindow {
-                    let parentFrame = parentWindow.frame
-                    let origin = NSPoint(
-                        x: parentFrame.midX - panelSize.width / 2,
-                        y: parentFrame.midY - panelSize.height / 2
-                    )
-                    panel.setFrameOrigin(origin)
                     parentWindow.addChildWindow(panel, ordered: .above)
                     imagePreviewParentWindowNumber = parentWindow.windowNumber
                     panel.orderFront(nil)
                 } else {
-                    panel.center()
                     panel.orderFrontRegardless()
                     imagePreviewParentWindowNumber = nil
                 }
