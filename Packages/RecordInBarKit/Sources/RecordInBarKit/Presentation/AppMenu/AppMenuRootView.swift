@@ -82,6 +82,11 @@ public struct AppMenuRootView: View {
         .onChange(of: searchText) { _, _ in
             selectedIndex = nil
         }
+        .onReceive(NotificationCenter.default.publisher(for: .escKeyPressed)) { _ in
+            if route == .main {
+                NSApp.keyWindow?.close()
+            }
+        }
     }
 
     private var appVersion: String {
