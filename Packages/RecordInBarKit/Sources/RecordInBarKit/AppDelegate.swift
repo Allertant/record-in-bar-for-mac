@@ -3,12 +3,17 @@ import Combine
 import SwiftData
 import SwiftUI
 
+extension Notification.Name {
+    static let escKeyPressed = Notification.Name("escKeyPressed")
+}
+
 @MainActor
 public final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSWindowDelegate {
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
     private var pinWindow: NSWindow?
     private var eventMonitor: Any?
+    private var localEventMonitor: Any?
     private var cancellables = Set<AnyCancellable>()
     private var isTransitioning = false
 
@@ -67,6 +72,16 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelega
                 }
             }
             .store(in: &cancellables)
+
+        localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self = self else { return event }
+            if event.keyCode == 53 { // ESC key
+                if self.popover?.isShown == true {
+                    NotificationCenter.default.post(name: .escKeyPressed, object: nil)
+                }
+            }
+            return event
+        }
 
         self.popover = popover
     }
@@ -128,10 +143,25 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelega
 
     @objc private func onPopoverDidShow(_ notification: Notification) {
         startMonitoring()
+        if localEventMonitor == nil {
+            localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self = self else { return event }
+                if event.keyCode == 53 { // ESC key
+                    if self.popover?.isShown == true {
+                        NotificationCenter.default.post(name: .escKeyPressed, object: nil)
+                    }
+                }
+                return event
+            }
+        }
     }
 
     @objc private func onPopoverDidClose(_ notification: Notification) {
         stopMonitoring()
+        if let monitor = localEventMonitor {
+            NSEvent.removeMonitor(monitor)
+            localEventMonitor = nil
+        }
         if !isTransitioning {
             NSApp.deactivate()
         }

@@ -203,10 +203,9 @@ struct EditorPageView: View {
         }
         .overlay { modalOverlay }
         .overlay { toastOverlay }
-        .onKeyPress(.escape) {
+        .onReceive(NotificationCenter.default.publisher(for: .escKeyPressed)) { _ in
             flushDraftPersistence(existingTopicID: topic?.id)
             onBack()
-            return .handled
         }
     }
 
