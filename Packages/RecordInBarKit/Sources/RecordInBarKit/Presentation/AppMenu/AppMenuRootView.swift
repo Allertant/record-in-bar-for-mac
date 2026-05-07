@@ -19,6 +19,7 @@ public struct AppMenuRootView: View {
     @State private var cachedKeywords: [String] = []
     @State private var mainPageScrollOffsetY: CGFloat = 0
     @State private var pendingMainPageRestoreOffsetY: CGFloat?
+    @State private var selectedIndex: Int? = nil
 
     private enum Route {
         case main
@@ -77,6 +78,9 @@ public struct AppMenuRootView: View {
             if newValue == .main {
                 pageReferenceDate = .now
             }
+        }
+        .onChange(of: searchText) { _, _ in
+            selectedIndex = nil
         }
     }
 
@@ -201,13 +205,14 @@ public struct AppMenuRootView: View {
                             .foregroundStyle(.secondary)
 
                         LazyVStack(spacing: 8) {
-                            ForEach(filteredTopics) { topic in
+                            ForEach(Array(filteredTopics.enumerated()), id: \.element.id) { index, topic in
                                 HistoryCardView(
                                     topic: topic,
                                     notePreview: previewText(for: topic),
                                     query: searchText,
                                     relativeTimeText: HistoryTimeFormatter.string(for: topic.createdAt),
-                                    tone: historyTone(for: topic)
+                                    tone: historyTone(for: topic),
+                                    isSelected: selectedIndex == index
                                 ) {
                                     selectedTopicID = topic.id
                                     navigate(to: .editor)
@@ -264,6 +269,31 @@ public struct AppMenuRootView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
+        }
+        .onKeyPress(.upArrow) {
+            guard !filteredTopics.isEmpty else { return .ignored }
+            if let current = selectedIndex, current > 0 {
+                selectedIndex = current - 1
+            } else {
+                selectedIndex = filteredTopics.count - 1
+            }
+            return .handled
+        }
+        .onKeyPress(.downArrow) {
+            guard !filteredTopics.isEmpty else { return .ignored }
+            if let current = selectedIndex, current < filteredTopics.count - 1 {
+                selectedIndex = current + 1
+            } else {
+                selectedIndex = 0
+            }
+            return .handled
+        }
+        .onKeyPress(.return) {
+            guard let index = selectedIndex, index < filteredTopics.count else { return .ignored }
+            let topic = filteredTopics[index]
+            selectedTopicID = topic.id
+            navigate(to: .editor)
+            return .handled
         }
     }
 
@@ -326,6 +356,7 @@ private struct HistoryCardView: View {
     let query: String
     let relativeTimeText: String
     let tone: PanelCardTone
+    let isSelected: Bool
     let onTap: () -> Void
     @Environment(\.colorScheme) private var colorScheme
 
@@ -362,6 +393,10 @@ private struct HistoryCardView: View {
             }
         }
         .buttonStyle(.plain)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(isSelected ? Color.accentColor : .clear, lineWidth: 2)
+        )
     }
 }
 
