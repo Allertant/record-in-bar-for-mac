@@ -73,16 +73,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelega
             }
             .store(in: &cancellables)
 
-        localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self = self else { return event }
-            if event.keyCode == 53 { // ESC key
-                if self.popover?.isShown == true {
-                    NotificationCenter.default.post(name: .escKeyPressed, object: nil)
-                }
-            }
-            return event
-        }
-
         self.popover = popover
     }
 
