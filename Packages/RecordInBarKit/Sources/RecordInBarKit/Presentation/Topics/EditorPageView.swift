@@ -203,6 +203,11 @@ struct EditorPageView: View {
         }
         .overlay { modalOverlay }
         .overlay { toastOverlay }
+        .onKeyPress(.escape) {
+            flushDraftPersistence(existingTopicID: topic?.id)
+            onBack()
+            return .handled
+        }
     }
 
     // MARK: - Single always-present modal overlay
