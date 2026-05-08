@@ -4,6 +4,9 @@ import SwiftUI
 struct SettingsPageView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var colorScheme
+    @Query private var topics: [Topic]
+    @Query private var notes: [NoteItem]
+    @Query private var noteImages: [NoteImage]
 
     let settings: AppSettings?
     let onBack: () -> Void
@@ -38,6 +41,7 @@ struct SettingsPageView: View {
             if let settings {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
+                        statsSection
                         deepSeekSection(for: settings)
                         appearanceSection(for: settings)
                         imageStorageSection(for: settings)
@@ -60,6 +64,49 @@ struct SettingsPageView: View {
                     }
             }
         }
+    }
+
+    // MARK: - Stats
+
+    private var totalTopics: Int { topics.count }
+
+    private var totalCharacters: Int {
+        notes.reduce(0) { sum, note in
+            let cleaned = note.content
+                .replacingOccurrences(of: #"\[IMG:[0-9A-Fa-f\-]+\]"#, with: "", options: .regularExpression)
+            return sum + cleaned.filter { !$0.isNewline }.count
+        }
+    }
+
+    private var totalImages: Int { noteImages.count }
+
+    @ViewBuilder
+    private var statsSection: some View {
+        Text("统计")
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.secondary)
+
+        PanelCard(tone: .settings) {
+            HStack(spacing: 0) {
+                statItem(value: "\(totalTopics)", label: "篇小记")
+                Divider().frame(height: 28)
+                statItem(value: "\(totalCharacters)", label: "字")
+                Divider().frame(height: 28)
+                statItem(value: "\(totalImages)", label: "张图片")
+            }
+        }
+    }
+
+    private func statItem(value: String, label: String) -> some View {
+        VStack(spacing: 4) {
+            Text(value)
+                .font(.system(size: 20, weight: .bold))
+                .foregroundStyle(.primary)
+            Text(label)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - DeepSeek
