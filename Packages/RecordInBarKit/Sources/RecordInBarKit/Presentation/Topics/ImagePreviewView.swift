@@ -3,62 +3,29 @@ import SwiftUI
 
 struct ImagePreviewView: View {
     @ObservedObject var state: ImagePreviewState
-    @State private var currentScale: CGFloat = 1.0
-    @GestureState private var pinchScale: CGFloat = 1.0
-
-    private var totalScale: CGFloat {
-        max(0.3, min(currentScale * pinchScale, 8.0))
-    }
 
     var body: some View {
-        GeometryReader { geo in
-            ZStack {
-                ScrollView([.horizontal, .vertical]) {
-                    let baseScale = min(
-                        geo.size.width / max(state.image.size.width, 1),
-                        geo.size.height / max(state.image.size.height, 1),
-                        1
-                    )
-                    let displayWidth = max(120, state.image.size.width * baseScale * totalScale)
-                    let displayHeight = max(120, state.image.size.height * baseScale * totalScale)
+        ZStack {
+            ZoomableImageView(image: state.image)
 
-                    Image(nsImage: state.image)
-                        .resizable()
-                        .interpolation(.high)
-                        .frame(width: displayWidth, height: displayHeight)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                        .padding(.horizontal, 72)
-                        .padding(.vertical, 24)
-                        .gesture(
-                            MagnifyGesture()
-                                .updating($pinchScale) { value, state, _ in
-                                    state = value.magnification
-                                }
-                                .onEnded { value in
-                                    currentScale = max(0.3, min(currentScale * value.magnification, 8.0))
-                                }
-                        )
-                }
+            HStack {
+                previewNavButton(
+                    systemName: "chevron.backward",
+                    isEnabled: state.canGoPrevious,
+                    action: state.onPrevious
+                )
 
-                HStack {
-                    previewNavButton(
-                        systemName: "chevron.backward",
-                        isEnabled: state.canGoPrevious,
-                        action: state.onPrevious
-                    )
+                Spacer()
 
-                    Spacer()
-
-                    previewNavButton(
-                        systemName: "chevron.forward",
-                        isEnabled: state.canGoNext,
-                        action: state.onNext
-                    )
-                }
-                .padding(.horizontal, 18)
+                previewNavButton(
+                    systemName: "chevron.forward",
+                    isEnabled: state.canGoNext,
+                    action: state.onNext
+                )
             }
-            .background(Color(nsColor: .windowBackgroundColor))
+            .padding(.horizontal, 18)
         }
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     @ViewBuilder
@@ -88,6 +55,176 @@ struct ImagePreviewView: View {
         .opacity(isEnabled ? 1 : 0.45)
     }
 }
+
+// MARK: - Zoomable NSView
+
+struct ZoomableImageView: NSViewRepresentable {
+    let image: NSImage
+
+    func makeNSView(context: Context) -> ZoomableImageNSView {
+        let view = ZoomableImageNSView()
+        view.image = image
+        return view
+    }
+
+    func updateNSView(_ nsView: ZoomableImageNSView, context: Context) {
+        if nsView.image !== image {
+            nsView.image = image
+            nsView.resetZoom()
+        }
+    }
+}
+
+final class ZoomableImageNSView: NSView {
+    var image: NSImage? {
+        didSet { needsDisplay = true }
+    }
+
+    private var scale: CGFloat = 1.0
+    private var offset: CGPoint = .zero
+    private var isDragging = false
+    private var lastDragPoint: CGPoint = .zero
+    private var baseFitScale: CGFloat = 1.0
+
+    private let minScale: CGFloat = 0.2
+    private let maxScale: CGFloat = 10.0
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        NSColor.windowBackgroundColor.setFill()
+        dirtyRect.fill()
+
+        guard let image else { return }
+
+        let fitScale = min(
+            bounds.width / max(image.size.width, 1),
+            bounds.height / max(image.size.height, 1),
+            1
+        )
+        baseFitScale = fitScale
+
+        let displayWidth = image.size.width * fitScale * scale
+        let displayHeight = image.size.height * fitScale * scale
+        let drawX = (bounds.width - displayWidth) / 2 + offset.x
+        let drawY = (bounds.height - displayHeight) / 2 + offset.y
+
+        image.draw(
+            in: NSRect(x: drawX, y: drawY, width: displayWidth, height: displayHeight),
+            from: .zero,
+            operation: .copy,
+            fraction: 1.0
+        )
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        needsDisplay = true
+    }
+
+    // MARK: - Trackpad pinch zoom
+
+    override func magnify(with event: NSEvent) {
+        let newScale = clampScale(scale * (1.0 + event.magnification))
+        let point = convert(event.locationInWindow, from: nil)
+
+        let oldDisplayWidth = image!.size.width * baseFitScale * scale
+        let oldDisplayHeight = image!.size.height * baseFitScale * scale
+        let oldDrawX = (bounds.width - oldDisplayWidth) / 2 + offset.x
+        let oldDrawY = (bounds.height - oldDisplayHeight) / 2 + offset.y
+        let relX = (point.x - oldDrawX) / max(oldDisplayWidth, 1)
+        let relY = (point.y - oldDrawY) / max(oldDisplayHeight, 1)
+
+        scale = newScale
+
+        let newDisplayWidth = image!.size.width * baseFitScale * scale
+        let newDisplayHeight = image!.size.height * baseFitScale * scale
+        let newDrawX = (bounds.width - newDisplayWidth) / 2 + offset.x
+        let newDrawY = (bounds.height - newDisplayHeight) / 2 + offset.y
+
+        offset.x += point.x - (newDrawX + relX * newDisplayWidth)
+        offset.y += point.y - (newDrawY + relY * newDisplayHeight)
+
+        needsDisplay = true
+    }
+
+    // MARK: - Scroll wheel zoom
+
+    override func scrollWheel(with event: NSEvent) {
+        guard event.deltaY != 0 else { return }
+
+        let zoomFactor: CGFloat
+        if event.hasPreciseScrollingDeltas {
+            zoomFactor = 1.0 + event.deltaY * 0.003
+        } else {
+            zoomFactor = event.deltaY > 0 ? 1.1 : 0.9
+        }
+
+        let point = convert(event.locationInWindow, from: nil)
+        zoomAt(point: point, factor: zoomFactor)
+    }
+
+    // MARK: - Drag to pan
+
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        lastDragPoint = point
+        isDragging = true
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard isDragging else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        offset.x += point.x - lastDragPoint.x
+        offset.y += point.y - lastDragPoint.y
+        lastDragPoint = point
+        needsDisplay = true
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        isDragging = false
+        if event.clickCount == 2 {
+            resetZoom()
+        }
+    }
+
+    // MARK: - Helpers
+
+    func resetZoom() {
+        scale = 1.0
+        offset = .zero
+        needsDisplay = true
+    }
+
+    private func clampScale(_ s: CGFloat) -> CGFloat {
+        max(minScale, min(s, maxScale))
+    }
+
+    private func zoomAt(point: CGPoint, factor: CGFloat) {
+        guard let image else { return }
+
+        let oldDisplayWidth = image.size.width * baseFitScale * scale
+        let oldDisplayHeight = image.size.height * baseFitScale * scale
+        let oldDrawX = (bounds.width - oldDisplayWidth) / 2 + offset.x
+        let oldDrawY = (bounds.height - oldDisplayHeight) / 2 + offset.y
+        let relX = (point.x - oldDrawX) / max(oldDisplayWidth, 1)
+        let relY = (point.y - oldDrawY) / max(oldDisplayHeight, 1)
+
+        let newScale = clampScale(scale * factor)
+
+        let newDisplayWidth = image.size.width * baseFitScale * newScale
+        let newDisplayHeight = image.size.height * baseFitScale * newScale
+        let newDrawX = (bounds.width - newDisplayWidth) / 2 + offset.x
+        let newDrawY = (bounds.height - newDisplayHeight) / 2 + offset.y
+
+        offset.x += point.x - (newDrawX + relX * newDisplayWidth)
+        offset.y += point.y - (newDrawY + relY * newDisplayHeight)
+
+        scale = newScale
+        needsDisplay = true
+    }
+}
+
+// MARK: - State
 
 @MainActor
 final class ImagePreviewState: ObservableObject {
