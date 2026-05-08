@@ -88,11 +88,11 @@ struct SettingsPageView: View {
 
         PanelCard(tone: .settings) {
             HStack(spacing: 0) {
-                statItem(value: "\(totalTopics)", label: "篇小记")
+                statItem(value: totalTopics.formatted(), label: "篇小记")
                 Divider().frame(height: 28)
-                statItem(value: "\(totalCharacters)", label: "字")
+                statItem(value: totalCharacters.formatted(), label: "字")
                 Divider().frame(height: 28)
-                statItem(value: "\(totalImages)", label: "张图片")
+                statItem(value: totalImages.formatted(), label: "张图片")
             }
         }
     }
@@ -100,8 +100,10 @@ struct SettingsPageView: View {
     private func statItem(value: String, label: String) -> some View {
         VStack(spacing: 4) {
             Text(value)
-                .font(.system(size: 20, weight: .bold))
+                .font(.system(size: 20, weight: .bold).monospacedDigit())
                 .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
             Text(label)
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
