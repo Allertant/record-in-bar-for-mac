@@ -38,6 +38,8 @@ struct EditorPageView: View {
     @State var imagePreviewState = ImagePreviewState()
     @State var imagePreviewTask: Task<Void, Never>?
     @State var pendingPersistTask: Task<Void, Never>?
+    @State private var editorScrollOffsetY: CGFloat = 0
+    @State private var pendingEditorRestoreOffsetY: CGFloat?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -91,7 +93,10 @@ struct EditorPageView: View {
                 }
             }
 
-            ScrollView {
+            ObservableVerticalScrollView(
+                contentOffsetY: $editorScrollOffsetY,
+                restoreOffsetY: $pendingEditorRestoreOffsetY
+            ) {
                 VStack(alignment: .leading, spacing: 12) {
                     documentEditorContent
 
@@ -185,7 +190,6 @@ struct EditorPageView: View {
                 }
                 .padding(12)
             }
-            .scrollIndicators(.hidden)
             .background(
                 Color(nsColor: .windowBackgroundColor)
                     .contentShape(Rectangle())
