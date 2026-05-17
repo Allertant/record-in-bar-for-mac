@@ -20,49 +20,54 @@ struct SettingsPageView: View {
     @State private var storagePathDisplay = ""
     @State private var isShowingFullStoragePath = false
     @State private var storagePathToast = ""
+    @State private var showResetKeywordsConfirmation = false
 
     private let deepSeekClient = DeepSeekClient()
 
     var body: some View {
-        VStack(spacing: 0) {
-            PanelPageHeader(title: "设置") {
-                Button(action: onBack) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
+        ZStack {
+            VStack(spacing: 0) {
+                PanelPageHeader(title: "设置") {
+                    Button(action: onBack) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(IconHoverButtonStyle())
+                } middle: {
+                    EmptyView()
+                } trailing: {
+                    Color.clear.frame(width: 1, height: 1)
                 }
-                .buttonStyle(IconHoverButtonStyle())
-            } middle: {
-                EmptyView()
-            } trailing: {
-                Color.clear.frame(width: 1, height: 1)
-            }
 
-            if let settings {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
-                        statsSection
-                        deepSeekSection(for: settings)
-                        appearanceSection(for: settings)
-                        imageStorageSection(for: settings)
+                if let settings {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            statsSection
+                            deepSeekSection(for: settings)
+                            appearanceSection(for: settings)
+                            imageStorageSection(for: settings)
+                            keywordSection
+                        }
+                        .padding(12)
                     }
-                    .padding(12)
-                }
-                .scrollIndicators(.hidden)
-                .task(id: settings.persistentModelID) {
-                    guard !didLoadDraft else { return }
-                    settings.normalizeAPIKeyStorage()
-                    apiKeyDraft = settings.deepSeekAPIKey
-                    storagePathDisplay = ImageStorage.currentBasePath()
-                    didLoadDraft = true
-                    try? modelContext.save()
-                }
-            } else {
-                ProgressView("正在加载设置...")
-                    .task {
-                        SettingsBootstrap.ensureDefaultSettings(in: modelContext)
+                    .scrollIndicators(.hidden)
+                    .task(id: settings.persistentModelID) {
+                        guard !didLoadDraft else { return }
+                        settings.normalizeAPIKeyStorage()
+                        apiKeyDraft = settings.deepSeekAPIKey
+                        storagePathDisplay = ImageStorage.currentBasePath()
+                        didLoadDraft = true
+                        try? modelContext.save()
                     }
+                } else {
+                    ProgressView("正在加载设置...")
+                        .task {
+                            SettingsBootstrap.ensureDefaultSettings(in: modelContext)
+                        }
+                }
             }
+            resetKeywordsOverlay
         }
     }
 
@@ -310,6 +315,69 @@ struct SettingsPageView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Keywords
+
+    @ViewBuilder
+    private var keywordSection: some View {
+        Text("关键词管理")
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.secondary)
+
+        PanelCard(tone: .settings) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("清除当前系统存储的小记关键词，下次系统定时任务会重新生成。")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button {
+                    showResetKeywordsConfirmation = true
+                } label: {
+                    Text("清除关键词")
+                        .font(.system(size: 12, weight: .medium))
+                }
+                .buttonStyle(IconProminentButtonStyle())
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var resetKeywordsOverlay: some View {
+        ZStack {
+            Button { showResetKeywordsConfirmation = false } label: {
+                Color.black.opacity(showResetKeywordsConfirmation ? 0.25 : 0)
+                    .ignoresSafeArea()
+            }
+            .buttonStyle(.plain)
+
+            ConfirmActionPage(
+                icon: "tag.slash",
+                iconTint: .orange,
+                title: "清除关键词",
+                message: "确认清除所有小记的关键词？清除后系统将在下次定时任务时重新生成。",
+                confirmLabel: "确认清除",
+                onCancel: { showResetKeywordsConfirmation = false },
+                onConfirm: {
+                    showResetKeywordsConfirmation = false
+                    resetAllKeywords()
+                }
+            )
+            .background(.regularMaterial)
+            .opacity(showResetKeywordsConfirmation ? 1 : 0)
+        }
+        .allowsHitTesting(showResetKeywordsConfirmation)
+        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: showResetKeywordsConfirmation)
+    }
+
+    @MainActor
+    private func resetAllKeywords() {
+        for topic in topics {
+            topic.keywords = []
+            topic.keywordsGeneratedAt = nil
+        }
+        try? modelContext.save()
     }
 
     // MARK: - Actions

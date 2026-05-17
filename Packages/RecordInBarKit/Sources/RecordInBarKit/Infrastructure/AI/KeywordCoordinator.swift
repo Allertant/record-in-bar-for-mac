@@ -87,13 +87,19 @@ enum KeywordCoordinator {
             noteContents: notes
         )
 
+        let fullText = ([title] + notes).joined(separator: " ")
+
         do {
             let keywords = try await DeepSeekClient().generateKeywords(
                 snapshot: snapshot,
                 apiKey: apiKey,
                 model: model
             )
-            freshTopic.keywords = keywords
+            let validated = keywords.filter { keyword in
+                fullText.contains(keyword)
+            }
+            guard !validated.isEmpty else { return }
+            freshTopic.keywords = validated
             freshTopic.keywordsGeneratedAt = .now
             try? context.save()
         } catch {
