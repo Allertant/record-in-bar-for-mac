@@ -21,6 +21,7 @@ struct SettingsPageView: View {
     @State private var isShowingFullStoragePath = false
     @State private var storagePathToast = ""
     @State private var showResetKeywordsConfirmation = false
+    @State private var showResetKeywordsLoading = false
 
     private let deepSeekClient = DeepSeekClient()
 
@@ -346,11 +347,14 @@ struct SettingsPageView: View {
     @ViewBuilder
     private var resetKeywordsOverlay: some View {
         ZStack {
-            Button { showResetKeywordsConfirmation = false } label: {
-                Color.black.opacity(showResetKeywordsConfirmation ? 0.25 : 0)
+            Button {
+                showResetKeywordsConfirmation = false
+            } label: {
+                Color.black.opacity(showResetKeywordsConfirmation || showResetKeywordsLoading ? 0.25 : 0)
                     .ignoresSafeArea()
             }
             .buttonStyle(.plain)
+            .disabled(showResetKeywordsLoading)
 
             ConfirmActionPage(
                 icon: "tag.slash",
@@ -366,18 +370,37 @@ struct SettingsPageView: View {
             )
             .background(.regularMaterial)
             .opacity(showResetKeywordsConfirmation ? 1 : 0)
+
+            if showResetKeywordsLoading {
+                VStack(spacing: 16) {
+                    ProgressView()
+                        .controlSize(.regular)
+
+                    Text("清除中...")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(20)
+                .background(.regularMaterial)
+            }
         }
-        .allowsHitTesting(showResetKeywordsConfirmation)
-        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: showResetKeywordsConfirmation)
+        .allowsHitTesting(showResetKeywordsConfirmation || showResetKeywordsLoading)
+        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: showResetKeywordsConfirmation || showResetKeywordsLoading)
     }
 
     @MainActor
     private func resetAllKeywords() {
+        showResetKeywordsLoading = true
         for topic in topics {
             topic.keywords = []
             topic.keywordsGeneratedAt = nil
         }
         try? modelContext.save()
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1))
+            showResetKeywordsLoading = false
+        }
     }
 
     // MARK: - Actions
