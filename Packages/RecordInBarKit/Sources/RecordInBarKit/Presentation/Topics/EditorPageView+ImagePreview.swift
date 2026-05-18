@@ -1,10 +1,12 @@
 import AppKit
+import SwiftData
 import SwiftUI
 
 extension EditorPageView {
     @MainActor
     func openImagePreview(uuid: UUID) {
-        guard let ni = noteImages.first(where: { $0.id == uuid }) else {
+        let descriptor = FetchDescriptor<NoteImage>(predicate: #Predicate<NoteImage> { $0.id == uuid })
+        guard let ni = try? modelContext.fetch(descriptor).first else {
             return
         }
 
@@ -119,7 +121,8 @@ extension EditorPageView {
         let orderedIDs = previewImageIDsInDraftOrder
         guard !orderedIDs.isEmpty else { return [] }
 
-        let imagesByID = Dictionary(uniqueKeysWithValues: noteImages.map { ($0.id, $0) })
+        let allImages = (try? modelContext.fetch(FetchDescriptor<NoteImage>())) ?? []
+        let imagesByID = Dictionary(uniqueKeysWithValues: allImages.map { ($0.id, $0) })
         return orderedIDs.compactMap { imagesByID[$0] }
     }
 

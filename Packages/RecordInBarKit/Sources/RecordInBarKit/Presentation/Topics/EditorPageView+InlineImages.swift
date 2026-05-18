@@ -1,4 +1,5 @@
 import AppKit
+import SwiftData
 import SwiftUI
 
 extension EditorPageView {
@@ -21,7 +22,9 @@ extension EditorPageView {
         let imageID = UUID()
         do {
             let relativePath = try ImageStorage.saveJPEG(data: jpegData, topicID: targetID, imageID: imageID)
-            let nextIndex = (noteImages.filter { $0.topicID == targetID }.map(\.sortIndex).max() ?? -1) + 1
+            let descriptor = FetchDescriptor<NoteImage>(predicate: #Predicate<NoteImage> { $0.topicID == targetID })
+            let existing = (try? modelContext.fetch(descriptor)) ?? []
+            let nextIndex = (existing.map(\.sortIndex).max() ?? -1) + 1
 
             let noteImage = NoteImage(
                 id: imageID,
@@ -44,7 +47,8 @@ extension EditorPageView {
 
     @MainActor
     func deleteInlineImage(_ imageID: UUID) {
-        guard let noteImage = noteImages.first(where: { $0.id == imageID }) else { return }
+        let descriptor = FetchDescriptor<NoteImage>(predicate: #Predicate { $0.id == imageID })
+        guard let noteImage = try? modelContext.fetch(descriptor).first else { return }
         ImageStorage.deleteImage(relativePath: noteImage.relativePath)
         modelContext.delete(noteImage)
         try? modelContext.save()

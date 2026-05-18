@@ -9,7 +9,6 @@ struct EditorPageView: View {
     @Query(sort: \AISummary.createdAt, order: .reverse) var summaries: [AISummary]
     @Query var allNotes: [NoteItem]
     @Query var allSummaries: [AISummary]
-    @Query(sort: \NoteImage.createdAt) var noteImages: [NoteImage]
     @Query var appSettings: [AppSettings]
 
     @ObservedObject private var pinManager = PopoverPinManager.shared
@@ -38,8 +37,6 @@ struct EditorPageView: View {
     @State var imagePreviewState = ImagePreviewState()
     @State var imagePreviewTask: Task<Void, Never>?
     @State var pendingPersistTask: Task<Void, Never>?
-    @State private var editorScrollOffsetY: CGFloat = 0
-    @State private var pendingEditorRestoreOffsetY: CGFloat?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -93,10 +90,7 @@ struct EditorPageView: View {
                 }
             }
 
-            ObservableVerticalScrollView(
-                contentOffsetY: $editorScrollOffsetY,
-                restoreOffsetY: $pendingEditorRestoreOffsetY
-            ) {
+            ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     documentEditorContent
 
@@ -190,6 +184,7 @@ struct EditorPageView: View {
                 }
                 .padding(12)
             }
+            .scrollIndicators(.hidden)
             .background(
                 Color(nsColor: .windowBackgroundColor)
                     .contentShape(Rectangle())
@@ -440,7 +435,8 @@ struct EditorPageView: View {
                         savePastedImage(image)
                     },
                     imageLoader: { uuid in
-                        guard let ni = noteImages.first(where: { $0.id == uuid }) else { return nil }
+                        let descriptor = FetchDescriptor<NoteImage>(predicate: #Predicate { $0.id == uuid })
+                        guard let ni = try? modelContext.fetch(descriptor).first else { return nil }
                         return ImageStorage.loadImage(relativePath: ni.relativePath)
                     },
                     onImageDeleted: { uuid in

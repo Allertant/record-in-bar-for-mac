@@ -1,3 +1,4 @@
+import SwiftData
 import SwiftUI
 
 extension EditorPageView {
@@ -81,7 +82,9 @@ extension EditorPageView {
                 .filter { $0.topicID == targetTopic.id }
                 .forEach(modelContext.delete)
 
-            let topicImages = noteImages.filter { $0.topicID == targetTopic.id }
+            let targetID = targetTopic.id
+            let descriptor = FetchDescriptor<NoteImage>(predicate: #Predicate<NoteImage> { $0.topicID == targetID })
+            let topicImages = (try? modelContext.fetch(descriptor)) ?? []
             topicImages.forEach { ImageStorage.deleteImage(relativePath: $0.relativePath) }
             topicImages.forEach(modelContext.delete)
 

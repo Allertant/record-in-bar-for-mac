@@ -1,4 +1,5 @@
 import AppKit
+import SwiftData
 import SwiftUI
 
 extension EditorPageView {
@@ -115,10 +116,12 @@ extension EditorPageView {
 
             let uuidRange = match.range(at: 1)
             let uuidString = nsText.substring(with: uuidRange)
-            if let uuid = UUID(uuidString: uuidString),
-               let ni = noteImages.first(where: { $0.id == uuid }),
-               let image = ImageStorage.loadImage(relativePath: ni.relativePath) {
-                segments.append(.image(image))
+            if let uuid = UUID(uuidString: uuidString) {
+                let descriptor = FetchDescriptor<NoteImage>(predicate: #Predicate<NoteImage> { $0.id == uuid })
+                if let ni = try? modelContext.fetch(descriptor).first,
+                   let image = ImageStorage.loadImage(relativePath: ni.relativePath) {
+                    segments.append(.image(image))
+                }
             }
 
             lastEnd = fullRange.location + fullRange.length
