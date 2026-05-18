@@ -303,6 +303,7 @@ struct SettingsPageView: View {
                     HStack(spacing: 6) {
                         ProgressView()
                             .controlSize(.small)
+                            .frame(width: 14, height: 14)
                         Text("正在迁移图片...")
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
@@ -375,6 +376,7 @@ struct SettingsPageView: View {
                 VStack(spacing: 16) {
                     ProgressView()
                         .controlSize(.regular)
+                        .frame(width: 20, height: 20)
 
                     Text("清除中...")
                         .font(.system(size: 13, weight: .medium))

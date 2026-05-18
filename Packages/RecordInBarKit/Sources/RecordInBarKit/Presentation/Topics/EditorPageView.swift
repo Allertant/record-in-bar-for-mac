@@ -105,6 +105,7 @@ struct EditorPageView: View {
                                     HStack(spacing: 6) {
                                         ProgressView()
                                             .controlSize(.small)
+                                            .frame(width: 14, height: 14)
                                         Text("AI 正在总结中...")
                                             .font(.system(size: 11))
                                             .foregroundStyle(.secondary)
@@ -120,6 +121,7 @@ struct EditorPageView: View {
                                         if topic.aiSummaryStatus == .processing {
                                             ProgressView()
                                                 .controlSize(.small)
+                                                .frame(width: 14, height: 14)
                                         } else {
                                             Image(systemName: "sparkles")
                                         }
@@ -356,6 +358,7 @@ struct EditorPageView: View {
                         if isGeneratingImage {
                             ProgressView()
                                 .controlSize(.small)
+                                .frame(width: 14, height: 14)
                             Text("生成中...")
                                 .font(.system(size: 13, weight: .medium))
                                 .foregroundStyle(.secondary)

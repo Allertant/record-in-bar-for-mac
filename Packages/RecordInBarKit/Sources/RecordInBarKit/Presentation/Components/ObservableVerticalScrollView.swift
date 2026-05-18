@@ -108,7 +108,9 @@ final class ScrollContainerController<Content: View>: NSViewController {
 
     override func viewDidLayout() {
         super.viewDidLayout()
-        syncDocumentSize()
+        DispatchQueue.main.async { [weak self] in
+            self?.syncDocumentSize()
+        }
     }
 
     deinit {
