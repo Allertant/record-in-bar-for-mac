@@ -23,7 +23,7 @@ struct EditorPageView: View {
     @State var draftTitle = ""
     @State var draftNote = ""
     @State var loadedTopicID: UUID?
-    @State private var showCopiedToast = false
+    @State private var isSummaryCopied = false
     @State var showShareSheet = false
     @State var isGeneratingImage = false
     @State var showShareSuccess = false
@@ -37,6 +37,7 @@ struct EditorPageView: View {
     @State var imagePreviewState = ImagePreviewState()
     @State var imagePreviewTask: Task<Void, Never>?
     @State var pendingPersistTask: Task<Void, Never>?
+    @State var summaryCopyResetTask: Task<Void, Never>?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -151,22 +152,15 @@ struct EditorPageView: View {
                                         HStack {
                                             Spacer()
 
-                                            ZStack(alignment: .bottomTrailing) {
-                                                if showCopiedToast {
-                                                    CopyToastView(text: "已复制")
-                                                        .offset(y: -24)
-                                                        .transition(.move(edge: .top).combined(with: .opacity))
-                                                }
-
-                                                Button {
-                                                    copySummary(latestSummary.summaryText)
-                                                } label: {
-                                                    Image(systemName: "doc.on.doc")
-                                                        .font(.system(size: 11, weight: .semibold))
-                                                        .foregroundStyle(PanelCardTone.summary.accent(for: colorScheme))
-                                                }
-                                                .buttonStyle(IconHoverButtonStyle())
+                                            Button {
+                                                copySummary(latestSummary.summaryText)
+                                            } label: {
+                                                Image(systemName: isSummaryCopied ? "checkmark" : "doc.on.doc")
+                                                    .font(.system(size: 11, weight: .semibold))
+                                                    .foregroundStyle(PanelCardTone.summary.accent(for: colorScheme))
+                                                    .frame(width: 14, height: 14)
                                             }
+                                            .buttonStyle(IconHoverButtonStyle())
                                         }
                                     }
                                     .frame(maxWidth: .infinity, minHeight: 92, alignment: .topLeading)
@@ -194,11 +188,15 @@ struct EditorPageView: View {
             )
         }
         .task(id: topic?.id) {
+            resetSummaryCopyFeedback()
             loadDraftIfNeeded()
         }
         .onDisappear {
             imagePreviewTask?.cancel()
             imagePreviewTask = nil
+            summaryCopyResetTask?.cancel()
+            summaryCopyResetTask = nil
+            resetSummaryCopyFeedback()
             closeImagePreviewPanel()
             flushDraftPersistence(existingTopicID: topic?.id)
         }
@@ -548,16 +546,26 @@ struct EditorPageView: View {
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
 
+        summaryCopyResetTask?.cancel()
+
         withAnimation(.easeOut(duration: 0.18)) {
-            showCopiedToast = true
+            isSummaryCopied = true
         }
 
-        Task { @MainActor in
+        summaryCopyResetTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(900))
+            guard !Task.isCancelled else { return }
             withAnimation(.easeIn(duration: 0.28)) {
-                showCopiedToast = false
+                isSummaryCopied = false
             }
         }
+    }
+
+    @MainActor
+    private func resetSummaryCopyFeedback() {
+        summaryCopyResetTask?.cancel()
+        summaryCopyResetTask = nil
+        isSummaryCopied = false
     }
 
     private func updateTimeHeader(for topic: Topic) -> some View {
