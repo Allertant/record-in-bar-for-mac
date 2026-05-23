@@ -89,5 +89,32 @@ final class StableScrollController<Content: View>: NSViewController {
         let targetY = min(max(0, y), maxOffset)
         clipView.scroll(to: NSPoint(x: 0, y: targetY))
         scrollView.reflectScrolledClipView(clipView)
+        ensureCursorVisible()
+    }
+
+    private func ensureCursorVisible() {
+        guard let textView = NSApp.keyWindow?.firstResponder as? NSTextView,
+              let container = textView.textContainer,
+              let manager = textView.layoutManager else { return }
+
+        let selection = textView.selectedRange()
+        guard selection.location != NSNotFound else { return }
+
+        let glyphRange = manager.glyphRange(forCharacterRange: selection, actualCharacterRange: nil)
+        let glyphRect = manager.boundingRect(forGlyphRange: glyphRange, in: container)
+        let cursorInHost = textView.convert(glyphRect, to: hostingView)
+
+        let clipView = scrollView.contentView
+        let visibleRect = clipView.bounds
+        let padding: CGFloat = 20
+
+        if cursorInHost.maxY > visibleRect.maxY - padding {
+            let newY = min(cursorInHost.maxY - visibleRect.height + padding, hostingView.frame.height - visibleRect.height)
+            clipView.scroll(to: NSPoint(x: 0, y: max(0, newY)))
+            scrollView.reflectScrolledClipView(clipView)
+        } else if cursorInHost.minY < visibleRect.minY + padding {
+            clipView.scroll(to: NSPoint(x: 0, y: max(0, cursorInHost.minY - padding)))
+            scrollView.reflectScrolledClipView(clipView)
+        }
     }
 }
