@@ -91,7 +91,7 @@ struct EditorPageView: View {
                 }
             }
 
-            ScrollView {
+            StableScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     documentEditorContent
 
@@ -180,7 +180,6 @@ struct EditorPageView: View {
                 }
                 .padding(12)
             }
-            .scrollIndicators(.hidden)
             .background(
                 Color(nsColor: .windowBackgroundColor)
                     .contentShape(Rectangle())
