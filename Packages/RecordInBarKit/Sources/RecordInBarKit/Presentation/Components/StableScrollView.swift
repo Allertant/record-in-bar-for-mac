@@ -23,6 +23,7 @@ struct StableScrollView<Content: View>: NSViewControllerRepresentable {
 final class StableScrollController<Content: View>: NSViewController {
     private let scrollView = NSScrollView()
     private let hostingView: NSHostingView<Content>
+    private var pendingRestoreY: CGFloat?
 
     init(rootView: Content) {
         hostingView = NSHostingView(rootView: rootView)
@@ -59,20 +60,18 @@ final class StableScrollController<Content: View>: NSViewController {
 
     override func viewDidLayout() {
         super.viewDidLayout()
-        let savedY = scrollView.contentView.bounds.origin.y
         syncDocumentSize()
-        restoreScroll(savedY)
+        if let y = pendingRestoreY {
+            pendingRestoreY = nil
+            restoreScroll(y)
+        }
     }
 
     func update(rootView: Content) {
         let savedY = scrollView.contentView.bounds.origin.y
         hostingView.rootView = rootView
+        pendingRestoreY = savedY
         hostingView.needsLayout = true
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.syncDocumentSize()
-            self.restoreScroll(savedY)
-        }
     }
 
     private func syncDocumentSize() {
