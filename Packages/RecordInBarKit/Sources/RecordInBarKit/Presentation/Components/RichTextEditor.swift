@@ -141,6 +141,8 @@ struct RichTextEditor: NSViewRepresentable {
         private(set) var isShowingDeferredImagePlaceholders = false
         private(set) var lastMeasuredWidth: CGFloat = 320
         private var lastMeasuredHeight: CGFloat = 0
+        private var contentRevision = 0
+        private var lastMeasuredRevision = -1
         private var isMeasuringSize = false
         private var heightInvalidated = false
         var imageLoader: (UUID) -> NSImage?
@@ -175,12 +177,8 @@ struct RichTextEditor: NSViewRepresentable {
             }
             previousAttachmentIDs = currentIDs
 
-            heightInvalidated = true
-            DispatchQueue.main.async { [weak self, weak textView] in
-                guard let self, let textView, self.heightInvalidated else { return }
-                self.heightInvalidated = false
-                textView.invalidateIntrinsicContentSize()
-            }
+            markHeightInvalidated()
+            scheduleHeightInvalidation(for: textView)
             scrollSelectionIntoView(for: textView)
         }
 
@@ -230,7 +228,8 @@ struct RichTextEditor: NSViewRepresentable {
             }
 
             previousAttachmentIDs = Self.attachmentIDs(in: textView)
-            heightInvalidated = true
+            markHeightInvalidated()
+            scheduleHeightInvalidation(for: textView)
 
             if preserveSelection {
                 let maxLocation = textView.textStorage?.length ?? 0
@@ -281,7 +280,10 @@ struct RichTextEditor: NSViewRepresentable {
             }
 
             // Return cache if width unchanged and content hasn't changed
-            if !heightInvalidated, abs(width - lastMeasuredWidth) < 0.5, lastMeasuredHeight > 0 {
+            if !heightInvalidated,
+               lastMeasuredRevision == contentRevision,
+               abs(width - lastMeasuredWidth) < 0.5,
+               lastMeasuredHeight > 0 {
                 return lastMeasuredHeight
             }
 
@@ -292,7 +294,21 @@ struct RichTextEditor: NSViewRepresentable {
             let usedRect = layoutManager.usedRect(for: textContainer)
             let height = max(minHeight, ceil(usedRect.height + verticalPadding * 2))
             lastMeasuredHeight = height
+            lastMeasuredRevision = contentRevision
+            heightInvalidated = false
             return height
+        }
+
+        private func markHeightInvalidated() {
+            contentRevision += 1
+            heightInvalidated = true
+        }
+
+        private func scheduleHeightInvalidation(for textView: NSTextView) {
+            DispatchQueue.main.async { [weak self, weak textView] in
+                guard let self, let textView, self.heightInvalidated else { return }
+                textView.invalidateIntrinsicContentSize()
+            }
         }
 
         // MARK: - Image marker helpers
