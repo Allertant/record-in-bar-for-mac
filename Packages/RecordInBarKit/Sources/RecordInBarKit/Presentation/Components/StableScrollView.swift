@@ -24,6 +24,7 @@ final class StableScrollController<Content: View>: NSViewController {
     private let scrollView = NSScrollView()
     private let hostingView: NSHostingView<Content>
     private var pendingRestoreY: CGFloat?
+    private var hasScheduledDocumentSizeSync = false
 
     init(rootView: Content) {
         hostingView = NSHostingView(rootView: rootView)
@@ -60,26 +61,43 @@ final class StableScrollController<Content: View>: NSViewController {
 
     override func viewDidLayout() {
         super.viewDidLayout()
-        syncDocumentSize()
-        if let y = pendingRestoreY {
-            pendingRestoreY = nil
-            restoreScroll(y)
-        }
+        scheduleDocumentSizeSync()
     }
 
     func update(rootView: Content) {
         let savedY = scrollView.contentView.bounds.origin.y
         hostingView.rootView = rootView
         pendingRestoreY = savedY
-        hostingView.needsLayout = true
+        scheduleDocumentSizeSync()
     }
 
     private func syncDocumentSize() {
         let width = max(1, scrollView.contentSize.width)
-        hostingView.frame = NSRect(x: 0, y: 0, width: width, height: 1_000_000)
-        hostingView.layoutSubtreeIfNeeded()
+        let currentHeight = max(1, hostingView.frame.height)
+        if abs(hostingView.frame.width - width) > 0.5 {
+            hostingView.frame = NSRect(x: 0, y: 0, width: width, height: currentHeight)
+        }
+
         let measuredHeight = max(1, hostingView.fittingSize.height)
-        hostingView.frame = NSRect(x: 0, y: 0, width: width, height: measuredHeight)
+        if abs(hostingView.frame.width - width) > 0.5 || abs(hostingView.frame.height - measuredHeight) > 0.5 {
+            hostingView.frame = NSRect(x: 0, y: 0, width: width, height: measuredHeight)
+        }
+
+        if let y = pendingRestoreY {
+            pendingRestoreY = nil
+            restoreScroll(y)
+        }
+    }
+
+    private func scheduleDocumentSizeSync() {
+        guard !hasScheduledDocumentSizeSync else { return }
+        hasScheduledDocumentSizeSync = true
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.hasScheduledDocumentSizeSync = false
+            self.syncDocumentSize()
+        }
     }
 
     private func restoreScroll(_ y: CGFloat) {
@@ -99,9 +117,18 @@ final class StableScrollController<Content: View>: NSViewController {
         let selection = textView.selectedRange()
         guard selection.location != NSNotFound else { return }
 
-        let glyphRange = manager.glyphRange(forCharacterRange: selection, actualCharacterRange: nil)
-        let glyphRect = manager.boundingRect(forGlyphRange: glyphRange, in: container)
-        let cursorInHost = textView.convert(glyphRect, to: hostingView)
+        manager.ensureLayout(for: container)
+        let glyphRect: NSRect
+        if selection.length == 0, selection.location == (textView.textStorage?.length ?? 0), !manager.extraLineFragmentRect.isEmpty {
+            glyphRect = manager.extraLineFragmentRect
+        } else {
+            let characterLocation = max(0, min(selection.location, max(0, (textView.textStorage?.length ?? 1) - 1)))
+            let glyphIndex = manager.glyphIndexForCharacter(at: characterLocation)
+            glyphRect = manager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
+        }
+        let textContainerOrigin = textView.textContainerOrigin
+        let cursorInTextView = glyphRect.offsetBy(dx: textContainerOrigin.x, dy: textContainerOrigin.y)
+        let cursorInHost = textView.convert(cursorInTextView, to: hostingView)
 
         let clipView = scrollView.contentView
         let visibleRect = clipView.bounds

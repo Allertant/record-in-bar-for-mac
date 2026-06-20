@@ -292,7 +292,9 @@ struct RichTextEditor: NSViewRepresentable {
             textContainer.containerSize = NSSize(width: contentWidth, height: CGFloat.greatestFiniteMagnitude)
             layoutManager.ensureLayout(for: textContainer)
             let usedRect = layoutManager.usedRect(for: textContainer)
-            let height = max(minHeight, ceil(usedRect.height + verticalPadding * 2))
+            let extraLineRect = layoutManager.extraLineFragmentRect
+            let contentMaxY = extraLineRect.isEmpty ? usedRect.maxY : max(usedRect.maxY, extraLineRect.maxY)
+            let height = max(minHeight, ceil(contentMaxY + verticalPadding * 2))
             lastMeasuredHeight = height
             lastMeasuredRevision = contentRevision
             heightInvalidated = false
@@ -504,9 +506,13 @@ final class InterceptingTextView: NSTextView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        syncTextContainerLayout()
         let point = convert(event.locationInWindow, from: nil)
         if let hit = imageHit(at: point), hit.zoomBadgeRect.contains(point) {
             onImageClicked?(hit.attachment.imageID)
+            return
+        }
+        if moveInsertionPointToDocumentEndIfNeeded(at: point) {
             return
         }
         super.mouseDown(with: event)
@@ -606,9 +612,36 @@ final class InterceptingTextView: NSTextView {
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
-        guard let tc = textContainer, newSize.width > 0 else { return }
-        let contentWidth = max(0, newSize.width - textContainerInset.width * 2)
+        syncTextContainerLayout()
+    }
+
+    private func syncTextContainerLayout() {
+        guard let tc = textContainer, bounds.width > 0 else { return }
+        let contentWidth = max(0, bounds.width - textContainerInset.width * 2)
         tc.containerSize = NSSize(width: contentWidth, height: .greatestFiniteMagnitude)
+        layoutManager?.ensureLayout(for: tc)
+    }
+
+    private func moveInsertionPointToDocumentEndIfNeeded(at point: CGPoint) -> Bool {
+        guard
+            let layoutManager,
+            let textContainer,
+            let textStorage,
+            textStorage.length > 0
+        else { return false }
+
+        layoutManager.ensureLayout(for: textContainer)
+        let extraLineRect = layoutManager.extraLineFragmentRect
+        guard !extraLineRect.isEmpty else { return false }
+
+        let extraLineInTextView = extraLineRect.offsetBy(dx: textContainerOrigin.x, dy: textContainerOrigin.y)
+        let clickableRect = extraLineInTextView.insetBy(dx: -textContainerInset.width, dy: -max(4, textContainerInset.height))
+        guard clickableRect.contains(point) else { return false }
+
+        window?.makeFirstResponder(self)
+        setSelectedRange(NSRange(location: textStorage.length, length: 0))
+        scrollRangeToVisible(selectedRange())
+        return true
     }
 
     override func paste(_ sender: Any?) {
