@@ -456,49 +456,43 @@ final class InterceptingTextView: NSTextView {
     override var isFlipped: Bool { true }
     var onImagePasted: ((NSImage) -> UUID?)?
     var onImageClicked: ((UUID) -> Void)?
-    private var previousAcceptsMouseMovedEvents: Bool?
     private lazy var imageActionButton: NSButton = makeImageActionButton()
     private var hoveredImageID: UUID?
+    private var imageHoverTrackingArea: NSTrackingArea?
 
     override func updateTrackingAreas() {
+        if let imageHoverTrackingArea {
+            removeTrackingArea(imageHoverTrackingArea)
+            self.imageHoverTrackingArea = nil
+        }
+
         super.updateTrackingAreas()
-        trackingAreas.forEach(removeTrackingArea)
+
         let area = NSTrackingArea(
-            rect: bounds,
+            rect: .zero,
             options: [.activeInKeyWindow, .mouseMoved, .mouseEnteredAndExited, .inVisibleRect],
             owner: self,
             userInfo: nil
         )
         addTrackingArea(area)
+        imageHoverTrackingArea = area
     }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if let window {
-            if previousAcceptsMouseMovedEvents == nil {
-                previousAcceptsMouseMovedEvents = window.acceptsMouseMovedEvents
-            }
-            window.acceptsMouseMovedEvents = true
-        }
         ensureImageActionButton()
-    }
-
-    deinit {
-        if let window, let previousAcceptsMouseMovedEvents {
-            window.acceptsMouseMovedEvents = previousAcceptsMouseMovedEvents
-        }
     }
 
     override func mouseEntered(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        updateImageHover(at: point)
         super.mouseEntered(with: event)
+        updateImageHover(at: point)
     }
 
     override func mouseMoved(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        updateImageHover(at: point)
         super.mouseMoved(with: event)
+        updateImageHover(at: point)
     }
 
     override func mouseExited(with event: NSEvent) {
@@ -562,12 +556,16 @@ final class InterceptingTextView: NSTextView {
         }
 
         hoveredImageID = hit.attachment.imageID
-        imageActionButton.frame = hit.zoomBadgeRect
-        imageActionButton.isHidden = false
-        imageActionButton.needsDisplay = true
+        if imageActionButton.frame != hit.zoomBadgeRect {
+            imageActionButton.frame = hit.zoomBadgeRect
+        }
+        if imageActionButton.isHidden {
+            imageActionButton.isHidden = false
+        }
     }
 
     private func hideImageActionButton() {
+        guard hoveredImageID != nil || !imageActionButton.isHidden else { return }
         hoveredImageID = nil
         imageActionButton.isHidden = true
     }

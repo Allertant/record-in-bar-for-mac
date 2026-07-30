@@ -53,6 +53,7 @@ final class ScrollContainerController<Content: View>: NSViewController {
     private let scrollView = NSScrollView()
     private let hostingView: NSHostingView<Content>
     private var isRestoring = false
+    private var hasScheduledDocumentSizeSync = false
 
     var showsIndicators: Bool = false {
         didSet {
@@ -108,9 +109,7 @@ final class ScrollContainerController<Content: View>: NSViewController {
 
     override func viewDidLayout() {
         super.viewDidLayout()
-        DispatchQueue.main.async { [weak self] in
-            self?.syncDocumentSize()
-        }
+        scheduleDocumentSizeSync()
     }
 
     deinit {
@@ -119,8 +118,7 @@ final class ScrollContainerController<Content: View>: NSViewController {
 
     func update(rootView: Content) {
         hostingView.rootView = rootView
-        hostingView.layoutSubtreeIfNeeded()
-        syncDocumentSize()
+        scheduleDocumentSizeSync()
     }
 
     func restore(offsetY: CGFloat, completion: @escaping () -> Void) {
@@ -151,9 +149,25 @@ final class ScrollContainerController<Content: View>: NSViewController {
 
     private func syncDocumentSize() {
         let width = max(1, scrollView.contentSize.width)
-        hostingView.frame = NSRect(x: 0, y: 0, width: width, height: max(1, hostingView.frame.height))
-        hostingView.layoutSubtreeIfNeeded()
+        let currentHeight = max(1, hostingView.frame.height)
+        if abs(hostingView.frame.width - width) > 0.5 {
+            hostingView.frame = NSRect(x: 0, y: 0, width: width, height: currentHeight)
+        }
+
         let measuredHeight = max(1, hostingView.fittingSize.height)
-        hostingView.frame = NSRect(x: 0, y: 0, width: width, height: measuredHeight)
+        if abs(hostingView.frame.width - width) > 0.5 || abs(hostingView.frame.height - measuredHeight) > 0.5 {
+            hostingView.frame = NSRect(x: 0, y: 0, width: width, height: measuredHeight)
+        }
+    }
+
+    private func scheduleDocumentSizeSync() {
+        guard !hasScheduledDocumentSizeSync else { return }
+        hasScheduledDocumentSizeSync = true
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.hasScheduledDocumentSizeSync = false
+            self.syncDocumentSize()
+        }
     }
 }
